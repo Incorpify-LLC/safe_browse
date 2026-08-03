@@ -1,0 +1,10 @@
+{
+  "name": "com.incorpify.safebrowse",
+  "description": "Safe Browse local protection service",
+  "path": "C:\\Program Files\\Safe Browse\\SafeBrowse.NativeHost.exe",
+  "type": "stdio",
+  "allowed_origins": [
+    "chrome-extension://REPLACE_WITH_CHROME_STORE_ID/",
+    "chrome-extension://REPLACE_WITH_EDGE_STORE_ID/"
+  ]
+}

@@ -1,0 +1,7 @@
+# Safe Browse curated anime category
+# Format: one domain per line. Add provenance in anime-provenance.csv.
+crunchyroll.com
+funimation.com
+hidive.com
+myanimelist.net
+anime-planet.com

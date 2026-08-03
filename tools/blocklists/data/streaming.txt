@@ -1,0 +1,7 @@
+# Seed list for the optional general-streaming category. Anime is maintained separately.
+netflix.com
+hulu.com
+disneyplus.com
+primevideo.com
+twitch.tv
+youtube.com

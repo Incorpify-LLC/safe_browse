@@ -1,0 +1,3 @@
+<Project Sdk="WixToolset.Sdk/5.0.2">
+  <PropertyGroup><OutputName>SafeBrowseSetup</OutputName><Platform>x64</Platform></PropertyGroup>
+</Project>

@@ -1,0 +1,27 @@
+name: CI
+on:
+  push:
+  pull_request:
+permissions:
+  contents: read
+jobs:
+  web:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: 22, cache: npm }
+      - run: npm ci
+      - run: npm run check
+      - run: npm run db:local --workspace @safe-browse/worker
+  windows:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with: { dotnet-version: 8.0.x }
+      - run: dotnet test apps/windows/tests/SafeBrowse.Core.Tests/SafeBrowse.Core.Tests.csproj -c Release
+      - run: dotnet build apps/windows/src/SafeBrowse.Service/SafeBrowse.Service.csproj -c Release
+      - run: dotnet build apps/windows/src/SafeBrowse.NativeHost/SafeBrowse.NativeHost.csproj -c Release
+      - run: dotnet build apps/windows/src/SafeBrowse.Enroll/SafeBrowse.Enroll.csproj -c Release
+      - run: dotnet build apps/windows/src/SafeBrowse.Tray/SafeBrowse.Tray.csproj -c Release

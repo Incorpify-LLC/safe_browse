@@ -1,0 +1,8 @@
+# Seed list for the optional gaming category. Every entry requires human review.
+steampowered.com
+steamcommunity.com
+epicgames.com
+roblox.com
+miniclip.com
+poki.com
+crazygames.com

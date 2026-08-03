@@ -1,0 +1,4 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup><OutputType>Exe</OutputType><PublishSingleFile>true</PublishSingleFile><SelfContained>true</SelfContained></PropertyGroup>
+  <ItemGroup><PackageReference Include="System.Security.Cryptography.ProtectedData" Version="8.0.0" /></ItemGroup>
+</Project>

@@ -1,0 +1,20 @@
+<Wix xmlns="http://wixtoolset.org/schemas/v4/wxs">
+  <Package Name="Safe Browse" Manufacturer="Incorpify LLC" Version="0.1.0" UpgradeCode="C75EDBF5-E5BB-445D-A40D-E64310E9E76D" Scope="perMachine">
+    <MajorUpgrade DowngradeErrorMessage="A newer Safe Browse version is already installed." />
+    <MediaTemplate EmbedCab="yes" />
+    <StandardDirectory Id="ProgramFiles64Folder"><Directory Id="INSTALLFOLDER" Name="Safe Browse">
+      <Component Id="ServiceFiles" Guid="*">
+        <File Id="ServiceExe" Source="..\artifacts\service\SafeBrowse.Service.exe" KeyPath="yes" />
+        <File Source="..\artifacts\service\appsettings.json" />
+        <ServiceInstall Id="SafeBrowseServiceInstall" Name="Safe Browse Protection" DisplayName="Safe Browse Protection" Description="Local parental-control DNS filtering" Start="auto" Type="ownProcess" ErrorControl="normal" Account="LocalSystem" />
+        <ServiceControl Id="SafeBrowseServiceControl" Name="Safe Browse Protection" Start="install" Stop="both" Remove="uninstall" Wait="yes" />
+      </Component>
+      <Component Id="ClientFiles" Guid="*">
+        <File Source="..\artifacts\native-host\SafeBrowse.NativeHost.exe" />
+        <File Source="..\artifacts\enroll\SafeBrowse.Enroll.exe" />
+        <File Source="..\artifacts\tray\SafeBrowse.Tray.exe" />
+      </Component>
+    </Directory></StandardDirectory>
+    <Feature Id="ProductFeature" Title="Safe Browse" Level="1"><ComponentRef Id="ServiceFiles" /><ComponentRef Id="ClientFiles" /></Feature>
+  </Package>
+</Wix>

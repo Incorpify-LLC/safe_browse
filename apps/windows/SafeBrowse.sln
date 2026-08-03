@@ -1,0 +1,48 @@
+Microsoft Visual Studio Solution File, Format Version 12.00
+# Visual Studio Version 17
+VisualStudioVersion = 17.0.31903.59
+MinimumVisualStudioVersion = 10.0.40219.1
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "SafeBrowse.Core", "src\SafeBrowse.Core\SafeBrowse.Core.csproj", "{6C70C8A2-322B-4A0A-9872-BEBA966EA9A1}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "SafeBrowse.Service", "src\SafeBrowse.Service\SafeBrowse.Service.csproj", "{570B4E20-76B9-4C77-97B0-168544299AFE}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "SafeBrowse.NativeHost", "src\SafeBrowse.NativeHost\SafeBrowse.NativeHost.csproj", "{474995C0-79F5-424A-B532-199EE5864529}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "SafeBrowse.Enroll", "src\SafeBrowse.Enroll\SafeBrowse.Enroll.csproj", "{8234235A-6B26-41A6-9DA2-EA9B8A43B821}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "SafeBrowse.Tray", "src\SafeBrowse.Tray\SafeBrowse.Tray.csproj", "{DC423F62-0497-4A40-9542-509175FB36C3}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "SafeBrowse.Core.Tests", "tests\SafeBrowse.Core.Tests\SafeBrowse.Core.Tests.csproj", "{A17FDDA2-3699-4DFC-B7DE-E06BFC703280}"
+EndProject
+Global
+  GlobalSection(SolutionConfigurationPlatforms) = preSolution
+    Debug|x64 = Debug|x64
+    Release|x64 = Release|x64
+  EndGlobalSection
+  GlobalSection(ProjectConfigurationPlatforms) = postSolution
+    {6C70C8A2-322B-4A0A-9872-BEBA966EA9A1}.Debug|x64.ActiveCfg = Debug|Any CPU
+    {6C70C8A2-322B-4A0A-9872-BEBA966EA9A1}.Debug|x64.Build.0 = Debug|Any CPU
+    {6C70C8A2-322B-4A0A-9872-BEBA966EA9A1}.Release|x64.ActiveCfg = Release|Any CPU
+    {6C70C8A2-322B-4A0A-9872-BEBA966EA9A1}.Release|x64.Build.0 = Release|Any CPU
+    {570B4E20-76B9-4C77-97B0-168544299AFE}.Debug|x64.ActiveCfg = Debug|Any CPU
+    {570B4E20-76B9-4C77-97B0-168544299AFE}.Debug|x64.Build.0 = Debug|Any CPU
+    {570B4E20-76B9-4C77-97B0-168544299AFE}.Release|x64.ActiveCfg = Release|Any CPU
+    {570B4E20-76B9-4C77-97B0-168544299AFE}.Release|x64.Build.0 = Release|Any CPU
+    {474995C0-79F5-424A-B532-199EE5864529}.Debug|x64.ActiveCfg = Debug|Any CPU
+    {474995C0-79F5-424A-B532-199EE5864529}.Debug|x64.Build.0 = Debug|Any CPU
+    {474995C0-79F5-424A-B532-199EE5864529}.Release|x64.ActiveCfg = Release|Any CPU
+    {474995C0-79F5-424A-B532-199EE5864529}.Release|x64.Build.0 = Release|Any CPU
+    {A17FDDA2-3699-4DFC-B7DE-E06BFC703280}.Debug|x64.ActiveCfg = Debug|Any CPU
+    {A17FDDA2-3699-4DFC-B7DE-E06BFC703280}.Debug|x64.Build.0 = Debug|Any CPU
+    {A17FDDA2-3699-4DFC-B7DE-E06BFC703280}.Release|x64.ActiveCfg = Release|Any CPU
+    {A17FDDA2-3699-4DFC-B7DE-E06BFC703280}.Release|x64.Build.0 = Release|Any CPU
+    {8234235A-6B26-41A6-9DA2-EA9B8A43B821}.Debug|x64.ActiveCfg = Debug|Any CPU
+    {8234235A-6B26-41A6-9DA2-EA9B8A43B821}.Debug|x64.Build.0 = Debug|Any CPU
+    {8234235A-6B26-41A6-9DA2-EA9B8A43B821}.Release|x64.ActiveCfg = Release|Any CPU
+    {8234235A-6B26-41A6-9DA2-EA9B8A43B821}.Release|x64.Build.0 = Release|Any CPU
+    {DC423F62-0497-4A40-9542-509175FB36C3}.Debug|x64.ActiveCfg = Debug|Any CPU
+    {DC423F62-0497-4A40-9542-509175FB36C3}.Debug|x64.Build.0 = Debug|Any CPU
+    {DC423F62-0497-4A40-9542-509175FB36C3}.Release|x64.ActiveCfg = Release|Any CPU
+    {DC423F62-0497-4A40-9542-509175FB36C3}.Release|x64.Build.0 = Release|Any CPU
+  EndGlobalSection
+EndGlobal

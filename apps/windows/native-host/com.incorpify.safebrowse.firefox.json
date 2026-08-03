@@ -1,0 +1,7 @@
+{
+  "name": "com.incorpify.safebrowse",
+  "description": "Safe Browse local protection service",
+  "path": "C:\\Program Files\\Safe Browse\\SafeBrowse.NativeHost.exe",
+  "type": "stdio",
+  "allowed_extensions": ["safe-browse@incorpify.com"]
+}

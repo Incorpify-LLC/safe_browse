@@ -1,0 +1,30 @@
+name: Compile blocklists
+on:
+  schedule:
+    - cron: "31 1 * * *"
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  compile:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: 22, cache: npm }
+      - run: npm ci
+      - name: Restore signing key
+        env:
+          SIGNING_KEY_PEM: ${{ secrets.BLOCKLIST_SIGNING_KEY_PEM }}
+        run: |
+          install -m 600 /dev/null "$RUNNER_TEMP/blocklist-signing-key.pem"
+          printf '%s' "$SIGNING_KEY_PEM" > "$RUNNER_TEMP/blocklist-signing-key.pem"
+      - run: npm run compile --workspace @safe-browse/blocklists -- "$RUNNER_TEMP/lists"
+        env:
+          SAFE_BROWSE_SIGNING_KEY: ${{ runner.temp }}/blocklist-signing-key.pem
+      - uses: actions/upload-artifact@v4
+        with:
+          name: compiled-blocklists
+          path: ${{ runner.temp }}/lists
+          retention-days: 7
+      # Production promotion uploads the reviewed artifact directory to R2 and updates lists/latest.json.

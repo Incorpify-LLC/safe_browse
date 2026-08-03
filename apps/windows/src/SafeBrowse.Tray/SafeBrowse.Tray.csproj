@@ -1,0 +1,4 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup><OutputType>WinExe</OutputType><UseWindowsForms>true</UseWindowsForms><PublishSingleFile>true</PublishSingleFile><SelfContained>true</SelfContained></PropertyGroup>
+  <ItemGroup><PackageReference Include="System.ServiceProcess.ServiceController" Version="8.0.1" /></ItemGroup>
+</Project>

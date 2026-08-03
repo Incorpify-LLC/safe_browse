@@ -1,0 +1,11 @@
+{
+  "manifest_version": 3,
+  "name": "Safe Browse",
+  "version": "0.1.0",
+  "description": "Explains Safe Browse blocks and lets children request access.",
+  "permissions": ["nativeMessaging", "webNavigation", "tabs"],
+  "background": { "scripts": ["background.js"] },
+  "action": { "default_title": "Safe Browse is active" },
+  "browser_specific_settings": { "gecko": { "id": "safe-browse@incorpify.com", "strict_min_version": "128.0" } },
+  "web_accessible_resources": [{ "resources": ["blocked.html", "blocked.css", "blocked.js"], "matches": ["<all_urls>"] }]
+}

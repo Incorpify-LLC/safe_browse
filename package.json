@@ -1,0 +1,13 @@
+{
+  "name": "safe-browse",
+  "private": true,
+  "version": "0.1.0",
+  "workspaces": ["apps/*", "packages/*", "tools/*"],
+  "scripts": {
+    "build": "npm run build --workspaces --if-present",
+    "test": "npm run test --workspaces --if-present",
+    "typecheck": "npm run typecheck --workspaces --if-present",
+    "check": "npm run typecheck && npm test && npm run build"
+  },
+  "engines": { "node": ">=22" }
+}

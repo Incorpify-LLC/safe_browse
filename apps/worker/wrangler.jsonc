@@ -1,0 +1,69 @@
+{
+  "$schema": "../../node_modules/wrangler/config-schema.json",
+  "name": "safe-browse-api",
+  "main": "src/index.ts",
+  "compatibility_date": "2026-08-02",
+  "compatibility_flags": ["nodejs_compat"],
+  "workers_dev": true,
+  "preview_urls": true,
+  "assets": {
+    "binding": "ASSETS",
+    "directory": "../dashboard/dist",
+    "not_found_handling": "single-page-application",
+    "run_worker_first": ["/api/*", "/health"]
+  },
+  "vars": {
+    "ENVIRONMENT": "development",
+    "ACCESS_TEAM_DOMAIN": "safe-browse.cloudflareaccess.com",
+    "ACCESS_AUD": "replace-with-access-aud-tag",
+    "EMAIL_FROM": "Safe Browse <alerts@example.com>"
+  },
+  "d1_databases": [
+    {
+      "binding": "DB",
+      "database_name": "safe-browse",
+      "database_id": "00000000-0000-0000-0000-000000000000",
+      "migrations_dir": "migrations"
+    }
+  ],
+  "r2_buckets": [
+    { "binding": "LISTS", "bucket_name": "safe-browse-lists" }
+  ],
+  "send_email": [
+    { "name": "EMAIL" }
+  ],
+  "triggers": { "crons": ["*/5 * * * *", "17 2 * * *"] },
+  "observability": {
+    "enabled": true,
+    "logs": { "enabled": true, "head_sampling_rate": 1 },
+    "traces": { "enabled": true, "head_sampling_rate": 0.05 }
+  },
+  "env": {
+    "staging": {
+      "name": "safe-browse-api-staging",
+      "vars": {
+        "ENVIRONMENT": "staging",
+        "ACCESS_TEAM_DOMAIN": "replace.cloudflareaccess.com",
+        "ACCESS_AUD": "replace-with-staging-aud",
+        "EMAIL_FROM": "Safe Browse <alerts@example.com>"
+      },
+      "d1_databases": [{ "binding": "DB", "database_name": "safe-browse-staging", "database_id": "11111111-1111-1111-1111-111111111111", "migrations_dir": "migrations" }],
+      "r2_buckets": [{ "binding": "LISTS", "bucket_name": "safe-browse-lists-staging" }],
+      "send_email": [{ "name": "EMAIL" }]
+    },
+    "production": {
+      "name": "safe-browse-api-production",
+      "workers_dev": false,
+      "preview_urls": false,
+      "vars": {
+        "ENVIRONMENT": "production",
+        "ACCESS_TEAM_DOMAIN": "replace.cloudflareaccess.com",
+        "ACCESS_AUD": "replace-with-production-aud",
+        "EMAIL_FROM": "Safe Browse <alerts@example.com>"
+      },
+      "d1_databases": [{ "binding": "DB", "database_name": "safe-browse", "database_id": "22222222-2222-2222-2222-222222222222", "migrations_dir": "migrations" }],
+      "r2_buckets": [{ "binding": "LISTS", "bucket_name": "safe-browse-lists" }],
+      "send_email": [{ "name": "EMAIL" }]
+    }
+  }
+}

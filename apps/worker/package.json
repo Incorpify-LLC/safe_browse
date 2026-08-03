@@ -1,0 +1,25 @@
+{
+  "name": "@safe-browse/worker",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "wrangler dev --config wrangler.jsonc",
+    "build": "wrangler deploy --dry-run --config wrangler.jsonc",
+    "typecheck": "wrangler types && tsc -p tsconfig.json --noEmit",
+    "test": "vitest run --passWithNoTests",
+    "db:local": "wrangler d1 migrations apply safe-browse --local --config wrangler.jsonc"
+  },
+  "dependencies": {
+    "@safe-browse/contracts": "0.1.0",
+    "hono": "^4.9.0",
+    "jose": "^6.1.0",
+    "zod": "^4.0.0"
+  },
+  "devDependencies": {
+    "@cloudflare/workers-types": "^5.20260801.1",
+    "typescript": "^5.9.0",
+    "vitest": "^4.0.0",
+    "wrangler": "^4.0.0"
+  }
+}
