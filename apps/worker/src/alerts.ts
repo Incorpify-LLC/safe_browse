@@ -73,6 +73,26 @@ export async function sendParentSecurityAlert(
   }
 
   try {
+    // 1. Send via Resend HTTP API (if RESEND_API_KEY configured)
+    if (env.RESEND_API_KEY) {
+      const res = await fetch("https://api.resend.com/emails", {
+        method: "POST",
+        headers: {
+          "Authorization": `Bearer ${env.RESEND_API_KEY}`,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          from: env.EMAIL_FROM || "Safe Browse Alerts <onboarding@resend.dev>",
+          to: [parentEmail],
+          subject,
+          html: bodyHtml,
+          text: bodyText,
+        }),
+      });
+      if (res.ok) return true;
+    }
+
+    // 2. Send via Cloudflare Native Email Binding
     if (env.EMAIL) {
       const mime = [
         `From: ${env.EMAIL_FROM || "Safe Browse Alerts <alerts@safebrowse.family>"}`,
