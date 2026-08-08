@@ -16,7 +16,9 @@
     "ENVIRONMENT": "development",
     "ACCESS_TEAM_DOMAIN": "safe-browse.cloudflareaccess.com",
     "ACCESS_AUD": "replace-with-access-aud-tag",
-    "EMAIL_FROM": "Safe Browse <alerts@example.com>"
+    "EMAIL_FROM": "Safe Browse <alerts@example.com>",
+    "TURNSTILE_SITE_KEY": "1x00000000000000000000AA",
+    "TURNSTILE_SECRET_KEY": "1x0000000000000000000000000000000AA"
   },
   "d1_databases": [
     {

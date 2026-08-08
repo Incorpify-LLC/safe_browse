@@ -2,6 +2,15 @@ import { useCallback, useEffect, useState, type FormEvent } from "react";
 import { ageBands, categories, type AgeBand, type Category } from "@safe-browse/contracts";
 import { api, type AccessRequest, type Child, type HistoryEvent, type PolicyView, type AuthStatus } from "./api";
 
+declare global {
+  interface Window {
+    turnstile?: {
+      render(container: string | HTMLElement, options: { sitekey: string; callback: (token: string) => void }): string;
+      reset(widgetId?: string): void;
+    };
+  }
+}
+
 const ageLabels: Record<AgeBand, string> = { under_10: "Under 10", age_10_12: "10–12", age_13_15: "13–15", age_16_17: "16–17" };
 
 export function App() {
@@ -93,6 +102,7 @@ function ParentAuthScreen({ authStatus, onAuthenticated }: { authStatus: AuthSta
   const [email, setEmail] = useState("");
   const [recoveryKey, setRecoveryKey] = useState("");
   const [newPassword, setNewPassword] = useState("");
+  const [turnstileToken, setTurnstileToken] = useState<string>("");
   const [generatedKey, setGeneratedKey] = useState<string | null>(null);
   const [mode, setMode] = useState<"auth" | "recover">("auth");
   const [copied, setCopied] = useState(false);
@@ -101,22 +111,37 @@ function ParentAuthScreen({ authStatus, onAuthenticated }: { authStatus: AuthSta
 
   const isSetup = authStatus?.requireSetup ?? false;
 
+  useEffect(() => {
+    const siteKey = authStatus?.turnstileSiteKey || "1x00000000000000000000AA";
+    const container = document.getElementById("turnstile-container");
+    if (container && window.turnstile && !container.hasChildNodes()) {
+      try {
+        window.turnstile.render("#turnstile-container", {
+          sitekey: siteKey,
+          callback: (token: string) => setTurnstileToken(token),
+        });
+      } catch {
+        // Ignore duplicate render
+      }
+    }
+  }, [authStatus, mode]);
+
   async function handleSubmit(e: FormEvent) {
     e.preventDefault();
     setError(null);
     setBusy(true);
     try {
       if (mode === "recover") {
-        const res = await api.recoverPassword(recoveryKey, newPassword);
+        const res = await api.recoverPassword(recoveryKey, newPassword, turnstileToken);
         setGeneratedKey(res.newRecoveryKey);
         return;
       }
 
       if (isSetup) {
-        const res = await api.setupPassword(password, email || undefined);
+        const res = await api.setupPassword(password, email || undefined, turnstileToken);
         setGeneratedKey(res.recoveryKey);
       } else {
-        await api.login(password);
+        await api.login(password, turnstileToken);
         await onAuthenticated();
       }
     } catch (err) {
@@ -248,6 +273,8 @@ function ParentAuthScreen({ authStatus, onAuthenticated }: { authStatus: AuthSta
             </label>
           </>
         )}
+
+        <div id="turnstile-container" style={{ margin: "16px 0", display: "flex", justifyContent: "center" }} />
 
         <button className="primary full" type="submit" disabled={busy}>
           {busy

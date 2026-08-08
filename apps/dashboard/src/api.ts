@@ -17,6 +17,7 @@ export type AuthStatus = {
   hasPassword: boolean;
   parentCount: number;
   requireSetup: boolean;
+  turnstileSiteKey?: string;
 };
 
 function getAuthHeader(): Record<string, string> {
@@ -42,11 +43,11 @@ export const api = {
     const res = await fetch("/api/v1/auth/status", { headers: getAuthHeader() });
     return res.json() as Promise<AuthStatus>;
   },
-  setupPassword: async (password: string, email?: string) => {
+  setupPassword: async (password: string, email?: string, turnstileToken?: string) => {
     const res = await fetch("/api/v1/auth/setup", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ password, email }),
+      body: JSON.stringify({ password, email, turnstileToken }),
     });
     if (!res.ok) {
       const data = await res.json().catch(() => ({})) as { error?: string; message?: string };
@@ -56,11 +57,11 @@ export const api = {
     localStorage.setItem("sb_parent_token", data.token);
     return data;
   },
-  recoverPassword: async (recoveryKey: string, newPassword: string) => {
+  recoverPassword: async (recoveryKey: string, newPassword: string, turnstileToken?: string) => {
     const res = await fetch("/api/v1/auth/recover", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ recoveryKey, newPassword }),
+      body: JSON.stringify({ recoveryKey, newPassword, turnstileToken }),
     });
     if (!res.ok) {
       const data = await res.json().catch(() => ({})) as { error?: string; message?: string };
@@ -70,11 +71,11 @@ export const api = {
     localStorage.setItem("sb_parent_token", data.token);
     return data;
   },
-  login: async (password: string) => {
+  login: async (password: string, turnstileToken?: string) => {
     const res = await fetch("/api/v1/auth/login", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ password }),
+      body: JSON.stringify({ password, turnstileToken }),
     });
     if (!res.ok) {
       const data = await res.json().catch(() => ({})) as { error?: string; message?: string };
