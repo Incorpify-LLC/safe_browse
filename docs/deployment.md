@@ -1,5 +1,37 @@
 # Deployment Runbook & Cloudflare Infrastructure Guide
 
+## ⚡ Quick Start — One-Click Deploy
+
+> **For parents and first-time deployers.** No prior Cloudflare experience needed.
+
+### 1. Create a Cloudflare API Token
+Follow the step-by-step guide in [docs/cloudflare-api-token.md](./cloudflare-api-token.md) to create a token with the required permissions. Takes ~3 minutes.
+
+### 2. Run the Deploy Script
+```bash
+# Clone the repository
+git clone https://github.com/Incorpify-LLC/safe_browse.git
+cd safe_browse
+
+# Run the one-click deploy (will prompt for your token)
+bash tools/deploy.sh
+```
+
+The script **fully automates** everything:
+- ✅ Creates the D1 database
+- ✅ Creates the R2 storage bucket
+- ✅ Creates the Turnstile CAPTCHA widget
+- ✅ Builds the dashboard UI
+- ✅ Applies database schema migrations
+- ✅ Deploys the Cloudflare Worker
+
+At the end, it prints your live dashboard URL. Open it, set your Parent Password, and you're done.
+
+**Prerequisites:** `node >= 18`, `npm`, `curl`, `jq`
+
+---
+
+
 This guide details the deployment procedure, Cloudflare setup, credit card enablement rules, and zero-cost guarantees for **Safe Browse**.
 
 ---
