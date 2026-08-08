@@ -13,7 +13,7 @@ This document outlines the product vision, core problem statement, end-to-end sy
 
 ### Target Audience & Scope
 - **Target Audience**: Small nuclear families (**< 10 devices/users** per household).
-- **Zero-Cost Operating Model**: Architecture designed so a family can host the backend on Cloudflare’s free tier ($0/month) or run a simple local container.
+- **Zero-Cost Operating Model**: Architecture designed so a family can host the backend on Cloudflare’s free tier ($0/month). Card activation is required by Cloudflare for anti-abuse R2 enablement, but monthly billing remains **$0.00** for family usage (< 10 devices). See [deployment.md](file:///home/sanjayu/shelf/projects/incorpify-llc/safe_browse/docs/deployment.md) for full R2 pricing details.
 - **Device Radius**:
   - **MVP Scope**: Windows 10 & 11 PCs (standard non-admin child accounts).
   - **Future Radius**: Mobile (iOS & Android) and macOS.
