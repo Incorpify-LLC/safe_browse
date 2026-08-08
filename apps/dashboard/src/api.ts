@@ -15,6 +15,7 @@ export type PolicyView = {
 
 export type AuthStatus = {
   hasPassword: boolean;
+  hasTotpBackup: boolean;
   parentCount: number;
   requireSetup: boolean;
   turnstileSiteKey?: string;
@@ -91,6 +92,37 @@ export const api = {
       void fetch("/api/v1/auth/logout", { method: "POST", headers: getAuthHeader() });
     }
     localStorage.removeItem("sb_parent_token");
+  },
+  totpSetup: async () => {
+    const res = await fetch("/api/v1/auth/totp/setup", { headers: getAuthHeader() });
+    if (!res.ok) throw new Error("Failed to generate authenticator setup");
+    return res.json() as Promise<{ secret: string; otpauthUri: string }>;
+  },
+  totpConfirm: async (secret: string, code: string) => {
+    const res = await fetch("/api/v1/auth/totp/confirm", {
+      method: "POST",
+      headers: { "Content-Type": "application/json", ...getAuthHeader() },
+      body: JSON.stringify({ secret, code }),
+    });
+    if (!res.ok) {
+      const data = await res.json().catch(() => ({})) as { message?: string };
+      throw new Error(data.message ?? "Confirmation failed");
+    }
+    return res.json() as Promise<{ ok: true }>;
+  },
+  totpRecover: async (totpCode: string, newPassword: string, turnstileToken?: string) => {
+    const res = await fetch("/api/v1/auth/totp/recover", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ totpCode, newPassword, turnstileToken }),
+    });
+    if (!res.ok) {
+      const data = await res.json().catch(() => ({})) as { message?: string };
+      throw new Error(data.message ?? "Recovery failed");
+    }
+    const data = await res.json() as { token: string; email: string };
+    localStorage.setItem("sb_parent_token", data.token);
+    return data;
   },
   children: () => request<{ children: Child[] }>("/children"),
   createChild: (body: { name: string; ageBand: AgeBand; timezone: string }) => request<{ id: string }>("/children", { method: "POST", body: JSON.stringify(body) }),

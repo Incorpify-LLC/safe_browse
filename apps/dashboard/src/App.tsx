@@ -104,7 +104,12 @@ function ParentAuthScreen({ authStatus, onAuthenticated }: { authStatus: AuthSta
   const [newPassword, setNewPassword] = useState("");
   const [turnstileToken, setTurnstileToken] = useState<string>("");
   const [generatedKey, setGeneratedKey] = useState<string | null>(null);
-  const [mode, setMode] = useState<"auth" | "recover">("auth");
+  const [mode, setMode] = useState<"auth" | "recover" | "totp-recover">("auth");
+  // TOTP setup state
+  const [totpSetup, setTotpSetup] = useState<{ secret: string; otpauthUri: string } | null>(null);
+  const [totpCode, setTotpCode] = useState("");
+  const [totpConfirmed, setTotpConfirmed] = useState(false);
+  const [totpNewPassword, setTotpNewPassword] = useState("");
   const [copied, setCopied] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
@@ -149,7 +154,11 @@ function ParentAuthScreen({ authStatus, onAuthenticated }: { authStatus: AuthSta
         setGeneratedKey(res.newRecoveryKey);
         return;
       }
-
+      if (mode === "totp-recover") {
+        await api.totpRecover(totpCode, totpNewPassword, turnstileToken);
+        await onAuthenticated();
+        return;
+      }
       if (isSetup) {
         const res = await api.setupPassword(password, email || undefined, turnstileToken);
         setGeneratedKey(res.recoveryKey);
@@ -172,8 +181,38 @@ function ParentAuthScreen({ authStatus, onAuthenticated }: { authStatus: AuthSta
     }
   }
 
-  // Display Emergency Recovery Key Modal after Setup or Recovery
+  // Display Emergency Recovery Key → then TOTP setup wizard
   if (generatedKey) {
+    // If TOTP is already confirmed, just proceed
+    if (totpConfirmed) {
+      return (
+        <div className="auth-shell">
+          <div className="auth-card recovery-box">
+            <div className="brand-header">
+              <span className="brand-mark">✅</span>
+              <h2>Authenticator App Linked</h2>
+              <p>Your authenticator app is set up. Use it to recover access if you ever forget your password.</p>
+            </div>
+            <button className="primary full" type="button" onClick={async () => { setGeneratedKey(null); setTotpConfirmed(false); await onAuthenticated(); }}>
+              Enter Dashboard
+            </button>
+          </div>
+        </div>
+      );
+    }
+    // TOTP setup wizard (shown after saving recovery key)
+    if (totpSetup) {
+      return <TotpSetupWizard
+        setup={totpSetup}
+        onConfirmed={async (code) => {
+          await api.totpConfirm(totpSetup.secret, code);
+          setTotpConfirmed(true);
+          setTotpSetup(null);
+        }}
+        onSkip={async () => { setGeneratedKey(null); setTotpSetup(null); await onAuthenticated(); }}
+      />;
+    }
+    // Recovery key screen — after "I have saved it", launch TOTP wizard
     return (
       <div className="auth-shell">
         <div className="auth-card recovery-box">
@@ -182,27 +221,28 @@ function ParentAuthScreen({ authStatus, onAuthenticated }: { authStatus: AuthSta
             <h2>Save Your Emergency Recovery Key</h2>
             <p>Keep this key safe! You can use it to reset your password if forgotten.</p>
           </div>
-
           <div className="key-display">
             <code>{generatedKey}</code>
             <button type="button" className="secondary" onClick={handleCopyKey}>
               {copied ? "Copied!" : "Copy Key"}
             </button>
           </div>
-
           <p className="subtext warning">
-            ⚠️ Store this key in a password manager or secure location. Without this key or a terminal CLI, password recovery requires resetting database settings.
+            ⚠️ Store this key somewhere safe. Next, we'll also set up an authenticator app as a second recovery method.
           </p>
-
           <button
             className="primary full"
             type="button"
             onClick={async () => {
-              setGeneratedKey(null);
-              await onAuthenticated();
+              // Launch TOTP wizard
+              const setup = await api.totpSetup();
+              setTotpSetup(setup);
             }}
           >
-            I Have Saved My Recovery Key
+            I Have Saved My Key → Set Up Authenticator App
+          </button>
+          <button className="text-button" type="button" onClick={async () => { setGeneratedKey(null); await onAuthenticated(); }}>
+            Skip authenticator setup (not recommended)
           </button>
         </div>
       </div>
@@ -223,6 +263,8 @@ function ParentAuthScreen({ authStatus, onAuthenticated }: { authStatus: AuthSta
         <h3>
           {mode === "recover"
             ? "Reset Master Password"
+            : mode === "totp-recover"
+            ? "Reset via Authenticator App"
             : isSetup
             ? "Create Master Password"
             : "Parent Authentication"}
@@ -230,6 +272,8 @@ function ParentAuthScreen({ authStatus, onAuthenticated }: { authStatus: AuthSta
         <p className="subtext">
           {mode === "recover"
             ? "Enter your 24-character Emergency Recovery Key to reset your password."
+            : mode === "totp-recover"
+            ? "Enter the 6-digit code from your authenticator app to reset your password."
             : isSetup
             ? "Set a master password for your household to protect family settings."
             : "Enter your parent master password to access child profiles and browsing logs."}
@@ -255,6 +299,32 @@ function ParentAuthScreen({ authStatus, onAuthenticated }: { authStatus: AuthSta
                 placeholder="••••••••"
                 value={newPassword}
                 onChange={(e) => setNewPassword(e.target.value)}
+                required
+              />
+            </label>
+          </>
+        ) : mode === "totp-recover" ? (
+          <>
+            <label>
+              6-Digit Authenticator Code
+              <input
+                type="text"
+                inputMode="numeric"
+                placeholder="123456"
+                maxLength={6}
+                value={totpCode}
+                onChange={(e) => setTotpCode(e.target.value.replace(/\D/g, "").slice(0, 6))}
+                required
+                autoFocus
+              />
+            </label>
+            <label>
+              New Master Password / PIN
+              <input
+                type="password"
+                placeholder="••••••••"
+                value={totpNewPassword}
+                onChange={(e) => setTotpNewPassword(e.target.value)}
                 required
               />
             </label>
@@ -302,9 +372,16 @@ function ParentAuthScreen({ authStatus, onAuthenticated }: { authStatus: AuthSta
         {!isSetup && (
           <div className="auth-footer">
             {mode === "auth" ? (
-              <button type="button" className="text-button" onClick={() => { setError(null); setMode("recover"); }}>
-                Forgot Password? Use Recovery Key
-              </button>
+              <>
+                <button type="button" className="text-button" onClick={() => { setError(null); setMode("recover"); }}>
+                  Forgot Password? Use Recovery Key
+                </button>
+                {authStatus?.hasTotpBackup && (
+                  <button type="button" className="text-button" onClick={() => { setError(null); setMode("totp-recover"); }}>
+                    Use Authenticator App Instead
+                  </button>
+                )}
+              </>
             ) : (
               <button type="button" className="text-button" onClick={() => { setError(null); setMode("auth"); }}>
                 Back to Password Login
@@ -313,6 +390,89 @@ function ParentAuthScreen({ authStatus, onAuthenticated }: { authStatus: AuthSta
           </div>
         )}
       </form>
+    </div>
+  );
+}
+
+// ── TOTP Setup Wizard ─────────────────────────────────────────────────────────
+function TotpSetupWizard({
+  setup,
+  onConfirmed,
+  onSkip,
+}: {
+  setup: { secret: string; otpauthUri: string };
+  onConfirmed: (code: string) => Promise<void>;
+  onSkip: () => Promise<void>;
+}) {
+  const [code, setCode] = useState("");
+  const [error, setError] = useState<string | null>(null);
+  const [busy, setBusy] = useState(false);
+  const [copied, setCopied] = useState(false);
+
+  // Generate QR code URL using a free public QR API (no third-party data leaks — only the otpauth:// URI is sent)
+  const qrUrl = `https://api.qrserver.com/v1/create-qr-code/?size=200x200&data=${encodeURIComponent(setup.otpauthUri)}`;
+
+  async function handleConfirm(e: React.FormEvent) {
+    e.preventDefault();
+    setError(null);
+    setBusy(true);
+    try {
+      await onConfirmed(code);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Code incorrect — try again");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <div className="auth-shell">
+      <div className="auth-card recovery-box">
+        <div className="brand-header">
+          <span className="brand-mark">📱</span>
+          <h2>Link Your Authenticator App</h2>
+          <p>Scan this QR code with Google Authenticator, Authy, or any TOTP app — then enter the 6-digit code to confirm.</p>
+        </div>
+
+        <div style={{ display: "flex", justifyContent: "center", margin: "12px 0" }}>
+          <img src={qrUrl} alt="TOTP QR Code" width={200} height={200} style={{ borderRadius: 8, border: "1px solid var(--border)" }} />
+        </div>
+
+        <details style={{ marginBottom: 12 }}>
+          <summary style={{ cursor: "pointer", fontSize: "0.85rem", opacity: 0.7 }}>Can't scan? Enter key manually</summary>
+          <div className="key-display" style={{ marginTop: 8 }}>
+            <code style={{ fontSize: "0.85rem", letterSpacing: 2 }}>{setup.secret}</code>
+            <button type="button" className="secondary" onClick={() => { void navigator.clipboard.writeText(setup.secret); setCopied(true); setTimeout(() => setCopied(false), 2000); }}>
+              {copied ? "Copied!" : "Copy"}
+            </button>
+          </div>
+        </details>
+
+        {error && <div className="error">{error}</div>}
+
+        <form onSubmit={handleConfirm}>
+          <label>
+            Enter the 6-digit code from your app
+            <input
+              type="text"
+              inputMode="numeric"
+              placeholder="123456"
+              maxLength={6}
+              value={code}
+              onChange={(e) => setCode(e.target.value.replace(/\D/g, "").slice(0, 6))}
+              required
+              autoFocus
+            />
+          </label>
+          <button className="primary full" type="submit" disabled={busy || code.length !== 6}>
+            {busy ? "Verifying..." : "Confirm & Link App"}
+          </button>
+        </form>
+
+        <button className="text-button" type="button" onClick={onSkip} style={{ marginTop: 8 }}>
+          Skip for now (can be set up later in settings)
+        </button>
+      </div>
     </div>
   );
 }

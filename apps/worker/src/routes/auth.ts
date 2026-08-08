@@ -6,6 +6,7 @@ import { sha256 } from "../crypto";
 import { ensureParent } from "../auth";
 import { verifyTurnstileToken } from "../turnstile";
 import { sendParentSecurityAlert } from "../alerts";
+import { generateTotpSecret, buildOtpAuthUri, verifyTotp } from "../totp";
 
 const app = new Hono<{ Bindings: AppBindings; Variables: AppVariables }>();
 
@@ -26,6 +27,17 @@ const recoverSchema = z.object({
   turnstileToken: z.string().optional(),
 });
 
+const totpConfirmSchema = z.object({
+  secret: z.string().min(16, "TOTP secret required"),
+  code: z.string().length(6, "6-digit code required"),
+});
+
+const totpRecoverSchema = z.object({
+  totpCode: z.string().length(6, "6-digit authenticator code required"),
+  newPassword: z.string().min(4, "Password must be at least 4 characters").max(100),
+  turnstileToken: z.string().optional(),
+});
+
 // Simple in-memory / D1 tracking for failed attempts per IP
 const failedAttemptsMap = new Map<string, { count: number; firstAttempt: number }>();
 
@@ -42,18 +54,111 @@ function normalizeKey(key: string): string {
 
 app.get("/status", async (context) => {
   const row = await context.env.DB.prepare(
-    `SELECT COUNT(*) AS count, SUM(CASE WHEN password_hash IS NOT NULL THEN 1 ELSE 0 END) AS withPassword FROM parents`,
-  ).first<{ count: number; withPassword: number }>();
+    `SELECT COUNT(*) AS count,
+      SUM(CASE WHEN password_hash IS NOT NULL THEN 1 ELSE 0 END) AS withPassword,
+      SUM(CASE WHEN totp_secret IS NOT NULL THEN 1 ELSE 0 END) AS withTotp
+     FROM parents`,
+  ).first<{ count: number; withPassword: number; withTotp: number }>();
 
   const hasPassword = (row?.withPassword ?? 0) > 0;
+  const hasTotpBackup = (row?.withTotp ?? 0) > 0;
   const parentCount = row?.count ?? 0;
 
   return context.json({
     hasPassword,
+    hasTotpBackup,
     parentCount,
     requireSetup: !hasPassword,
     turnstileSiteKey: context.env.TURNSTILE_SITE_KEY || "1x00000000000000000000AA",
   });
+});
+
+// ── TOTP Setup: generate a fresh secret + QR URI (called during onboarding) ──
+app.get("/totp/setup", async (context) => {
+  const authHeader = context.req.header("Authorization");
+  if (!authHeader?.startsWith("Bearer ")) {
+    return context.json({ error: "unauthorized" }, 401);
+  }
+  const token = authHeader.slice(7).trim();
+  const tokenHash = await sha256(token);
+  const parent = await context.env.DB.prepare(
+    `SELECT id, email FROM parents WHERE session_token = ?`,
+  ).bind(tokenHash).first<{ id: string; email: string }>();
+  if (!parent) return context.json({ error: "unauthorized" }, 401);
+
+  const secret = generateTotpSecret();
+  const label = parent.email.startsWith("parent@family.local") ? "Safe Browse" : parent.email;
+  const otpauthUri = buildOtpAuthUri(secret, label);
+  return context.json({ secret, otpauthUri });
+});
+
+// ── TOTP Confirm: verify first code proves app is set up, then persist secret ─
+app.post("/totp/confirm", async (context) => {
+  const authHeader = context.req.header("Authorization");
+  if (!authHeader?.startsWith("Bearer ")) {
+    return context.json({ error: "unauthorized" }, 401);
+  }
+  const token = authHeader.slice(7).trim();
+  const tokenHash = await sha256(token);
+  const parent = await context.env.DB.prepare(
+    `SELECT id, email FROM parents WHERE session_token = ?`,
+  ).bind(tokenHash).first<{ id: string; email: string }>();
+  if (!parent) return context.json({ error: "unauthorized" }, 401);
+
+  const body = await parseJson(context, totpConfirmSchema);
+  if (isResponse(body)) return body;
+
+  const ok = await verifyTotp(body.secret, body.code);
+  if (!ok) {
+    return context.json({ error: "invalid_code", message: "Incorrect code — check your authenticator app and try again." }, 400);
+  }
+
+  await context.env.DB.prepare(
+    `UPDATE parents SET totp_secret = ? WHERE id = ?`,
+  ).bind(body.secret, parent.id).run();
+
+  return context.json({ ok: true });
+});
+
+// ── TOTP Recover: use authenticator code to reset password ────────────────────
+app.post("/totp/recover", async (context) => {
+  const body = await parseJson(context, totpRecoverSchema);
+  if (isResponse(body)) return body;
+
+  const clientIp = context.req.header("CF-Connecting-IP") || context.req.header("X-Forwarded-For") || "127.0.0.1";
+  const userAgent = context.req.header("User-Agent") || "Unknown";
+
+  const turnstileOk = await verifyTurnstileToken(context.env.TURNSTILE_SECRET_KEY, body.turnstileToken, clientIp);
+  if (!turnstileOk) {
+    return context.json({ error: "turnstile_failed", message: "CAPTCHA verification failed. Please try again." }, 400);
+  }
+
+  // Find parent with a TOTP secret configured
+  const parent = await context.env.DB.prepare(
+    `SELECT id, email, totp_secret FROM parents WHERE totp_secret IS NOT NULL LIMIT 1`,
+  ).first<{ id: string; email: string; totp_secret: string }>();
+
+  if (!parent) {
+    return context.json({ error: "totp_not_configured", message: "No authenticator app has been set up for this account." }, 404);
+  }
+
+  const valid = await verifyTotp(parent.totp_secret, body.totpCode);
+  if (!valid) {
+    return context.json({ error: "invalid_totp", message: "Incorrect authenticator code. Try again — codes refresh every 30 seconds." }, 401);
+  }
+
+  // Valid — reset password, issue new session
+  const newPasswordHash = await sha256(`sb_salt_${body.newPassword}`);
+  const sessionToken = crypto.randomUUID() + "-" + crypto.randomUUID();
+  const tokenHash = await sha256(sessionToken);
+
+  await context.env.DB.prepare(
+    `UPDATE parents SET password_hash = ?, session_token = ? WHERE id = ?`,
+  ).bind(newPasswordHash, tokenHash, parent.id).run();
+
+  void sendParentSecurityAlert(context.env, parent.email, "password.recovery_used", { ipAddress: clientIp, userAgent });
+
+  return context.json({ token: sessionToken, email: parent.email });
 });
 
 app.post("/setup", async (context) => {
