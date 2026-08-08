@@ -52,7 +52,21 @@ export const api = {
       const data = await res.json().catch(() => ({})) as { error?: string; message?: string };
       throw new Error(data.message ?? data.error ?? "Password setup failed");
     }
-    const data = await res.json() as { token: string; email: string };
+    const data = await res.json() as { token: string; email: string; recoveryKey: string };
+    localStorage.setItem("sb_parent_token", data.token);
+    return data;
+  },
+  recoverPassword: async (recoveryKey: string, newPassword: string) => {
+    const res = await fetch("/api/v1/auth/recover", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ recoveryKey, newPassword }),
+    });
+    if (!res.ok) {
+      const data = await res.json().catch(() => ({})) as { error?: string; message?: string };
+      throw new Error(data.message ?? data.error ?? "Invalid recovery key");
+    }
+    const data = await res.json() as { token: string; email: string; newRecoveryKey: string };
     localStorage.setItem("sb_parent_token", data.token);
     return data;
   },

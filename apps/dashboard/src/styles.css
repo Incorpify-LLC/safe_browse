@@ -33,3 +33,11 @@ main { padding:40px 5vw 80px; max-width:1500px;width:100%;margin:auto;align-self
 .auth-card button.primary:hover{background:#9ad0b6}
 .auth-card .error{background:#3b1816;border:1px solid #6c2a26;color:#f8a6a0;padding:10px 14px;border-radius:8px;font-size:12px;margin-bottom:16px}
 .text-button{background:transparent;border:0;color:#80bd9f;cursor:pointer;text-decoration:underline;padding:0;font:inherit;margin-left:4px}
+.auth-footer{margin-top:18px;text-align:center}
+.auth-footer .text-button{font-size:12px;color:#a8c4ba}
+.auth-footer .text-button:hover{color:#80bd9f}
+.key-display{background:#081813;border:1px dashed #3a755d;border-radius:12px;padding:16px;margin:16px 0;display:flex;align-items:center;justify-content:space-between;gap:12px}
+.key-display code{font-family:monospace;font-size:14px;color:#80bd9f;font-weight:700;letter-spacing:0.5px}
+.key-display button{padding:6px 12px;font-size:12px;border-radius:6px;border:1px solid #2d5a49;background:#15342a;color:white;cursor:pointer}
+.key-display button:hover{background:#1e473a}
+.subtext.warning{background:#2a1f0a;border:1px solid #5a4214;color:#f0c068;padding:10px 12px;border-radius:8px;font-size:11px;margin-bottom:18px}

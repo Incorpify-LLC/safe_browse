@@ -91,6 +91,11 @@ export function App() {
 function ParentAuthScreen({ authStatus, onAuthenticated }: { authStatus: AuthStatus | null; onAuthenticated(): Promise<void> }) {
   const [password, setPassword] = useState("");
   const [email, setEmail] = useState("");
+  const [recoveryKey, setRecoveryKey] = useState("");
+  const [newPassword, setNewPassword] = useState("");
+  const [generatedKey, setGeneratedKey] = useState<string | null>(null);
+  const [mode, setMode] = useState<"auth" | "recover">("auth");
+  const [copied, setCopied] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
 
@@ -101,17 +106,69 @@ function ParentAuthScreen({ authStatus, onAuthenticated }: { authStatus: AuthSta
     setError(null);
     setBusy(true);
     try {
+      if (mode === "recover") {
+        const res = await api.recoverPassword(recoveryKey, newPassword);
+        setGeneratedKey(res.newRecoveryKey);
+        return;
+      }
+
       if (isSetup) {
-        await api.setupPassword(password, email || undefined);
+        const res = await api.setupPassword(password, email || undefined);
+        setGeneratedKey(res.recoveryKey);
       } else {
         await api.login(password);
+        await onAuthenticated();
       }
-      await onAuthenticated();
     } catch (err) {
       setError(err instanceof Error ? err.message : "Authentication failed");
     } finally {
       setBusy(false);
     }
+  }
+
+  function handleCopyKey() {
+    if (generatedKey) {
+      void navigator.clipboard.writeText(generatedKey);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    }
+  }
+
+  // Display Emergency Recovery Key Modal after Setup or Recovery
+  if (generatedKey) {
+    return (
+      <div className="auth-shell">
+        <div className="auth-card recovery-box">
+          <div className="brand-header">
+            <span className="brand-mark">🔑</span>
+            <h2>Save Your Emergency Recovery Key</h2>
+            <p>Keep this key safe! You can use it to reset your password if forgotten.</p>
+          </div>
+
+          <div className="key-display">
+            <code>{generatedKey}</code>
+            <button type="button" className="secondary" onClick={handleCopyKey}>
+              {copied ? "Copied!" : "Copy Key"}
+            </button>
+          </div>
+
+          <p className="subtext warning">
+            ⚠️ Store this key in a password manager or secure location. Without this key or a terminal CLI, password recovery requires resetting database settings.
+          </p>
+
+          <button
+            className="primary full"
+            type="button"
+            onClick={async () => {
+              setGeneratedKey(null);
+              await onAuthenticated();
+            }}
+          >
+            I Have Saved My Recovery Key
+          </button>
+        </div>
+      </div>
+    );
   }
 
   return (
@@ -125,40 +182,96 @@ function ParentAuthScreen({ authStatus, onAuthenticated }: { authStatus: AuthSta
         
         {error && <div className="error">{error}</div>}
 
-        <h3>{isSetup ? "Create Master Password" : "Parent Authentication"}</h3>
+        <h3>
+          {mode === "recover"
+            ? "Reset Master Password"
+            : isSetup
+            ? "Create Master Password"
+            : "Parent Authentication"}
+        </h3>
         <p className="subtext">
-          {isSetup
+          {mode === "recover"
+            ? "Enter your 24-character Emergency Recovery Key to reset your password."
+            : isSetup
             ? "Set a master password for your household to protect family settings."
             : "Enter your parent master password to access child profiles and browsing logs."}
         </p>
 
-        {isSetup && (
-          <label>
-            Parent Email (Optional)
-            <input
-              type="email"
-              placeholder="parent@family.com"
-              value={email}
-              onChange={(e) => setEmail(e.target.value)}
-            />
-          </label>
+        {mode === "recover" ? (
+          <>
+            <label>
+              Emergency Recovery Key
+              <input
+                type="text"
+                placeholder="SB-XXXX-XXXX-XXXX-XXXX"
+                value={recoveryKey}
+                onChange={(e) => setRecoveryKey(e.target.value)}
+                required
+                autoFocus
+              />
+            </label>
+            <label>
+              New Master Password / PIN
+              <input
+                type="password"
+                placeholder="••••••••"
+                value={newPassword}
+                onChange={(e) => setNewPassword(e.target.value)}
+                required
+              />
+            </label>
+          </>
+        ) : (
+          <>
+            {isSetup && (
+              <label>
+                Parent Email (Optional)
+                <input
+                  type="email"
+                  placeholder="parent@family.com"
+                  value={email}
+                  onChange={(e) => setEmail(e.target.value)}
+                />
+              </label>
+            )}
+
+            <label>
+              Master Password / PIN
+              <input
+                type="password"
+                placeholder="••••••••"
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+                required
+                autoFocus
+              />
+            </label>
+          </>
         )}
 
-        <label>
-          Master Password / PIN
-          <input
-            type="password"
-            placeholder="••••••••"
-            value={password}
-            onChange={(e) => setPassword(e.target.value)}
-            required
-            autoFocus
-          />
-        </label>
-
         <button className="primary full" type="submit" disabled={busy}>
-          {busy ? "Authenticating..." : isSetup ? "Set Password & Enter" : "Unlock Console"}
+          {busy
+            ? "Processing..."
+            : mode === "recover"
+            ? "Reset Password & Login"
+            : isSetup
+            ? "Set Password & Continue"
+            : "Unlock Console"}
         </button>
+
+        {!isSetup && (
+          <div className="auth-footer">
+            {mode === "auth" ? (
+              <button type="button" className="text-button" onClick={() => { setError(null); setMode("recover"); }}>
+                Forgot Password? Use Recovery Key
+              </button>
+            ) : (
+              <button type="button" className="text-button" onClick={() => { setError(null); setMode("auth"); }}>
+                Back to Password Login
+              </button>
+            )}
+          </div>
+        )}
       </form>
     </div>
   );

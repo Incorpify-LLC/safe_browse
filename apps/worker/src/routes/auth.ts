@@ -16,6 +16,22 @@ const loginSchema = z.object({
   password: z.string().min(1, "Password is required"),
 });
 
+const recoverSchema = z.object({
+  recoveryKey: z.string().min(8, "Recovery key is required"),
+  newPassword: z.string().min(4, "Password must be at least 4 characters").max(100),
+});
+
+function generateRecoveryKey(): string {
+  const bytes = new Uint8Array(12);
+  crypto.getRandomValues(bytes);
+  const hex = Array.from(bytes, (b) => b.toString(16).padStart(2, "0")).join("").toUpperCase();
+  return `SB-${hex.slice(0, 4)}-${hex.slice(4, 8)}-${hex.slice(8, 12)}-${hex.slice(12, 16)}`;
+}
+
+function normalizeKey(key: string): string {
+  return key.trim().toUpperCase().replace(/[^A-Z0-9]/g, "");
+}
+
 app.get("/status", async (context) => {
   const row = await context.env.DB.prepare(
     `SELECT COUNT(*) AS count, SUM(CASE WHEN password_hash IS NOT NULL THEN 1 ELSE 0 END) AS withPassword FROM parents`,
@@ -39,14 +55,17 @@ app.post("/setup", async (context) => {
   const parent = await ensureParent(context.env.DB, email);
   const passwordHash = await sha256(`sb_salt_${body.password}`);
 
+  const rawKey = generateRecoveryKey();
+  const recoveryHash = await sha256(`sb_rec_${normalizeKey(rawKey)}`);
+
   const sessionToken = crypto.randomUUID() + "-" + crypto.randomUUID();
   const tokenHash = await sha256(sessionToken);
 
   await context.env.DB.prepare(
-    `UPDATE parents SET password_hash = ?, session_token = ? WHERE id = ?`,
-  ).bind(passwordHash, tokenHash, parent.id).run();
+    `UPDATE parents SET password_hash = ?, recovery_key_hash = ?, session_token = ? WHERE id = ?`,
+  ).bind(passwordHash, recoveryHash, tokenHash, parent.id).run();
 
-  return context.json({ token: sessionToken, email: parent.email });
+  return context.json({ token: sessionToken, email: parent.email, recoveryKey: rawKey });
 });
 
 app.post("/login", async (context) => {
@@ -71,6 +90,35 @@ app.post("/login", async (context) => {
   ).bind(tokenHash, parent.id).run();
 
   return context.json({ token: sessionToken, email: parent.email });
+});
+
+app.post("/recover", async (context) => {
+  const body = await parseJson(context, recoverSchema);
+  if (isResponse(body)) return body;
+
+  const normalized = normalizeKey(body.recoveryKey);
+  const recoveryHash = await sha256(`sb_rec_${normalized}`);
+
+  const parent = await context.env.DB.prepare(
+    `SELECT id, household_id AS householdId, email FROM parents WHERE recovery_key_hash = ?`,
+  ).bind(recoveryHash).first<{ id: string; householdId: string; email: string }>();
+
+  if (!parent) {
+    return context.json({ error: "invalid_recovery_key", message: "Invalid emergency recovery key" }, 401);
+  }
+
+  const newPasswordHash = await sha256(`sb_salt_${body.newPassword}`);
+  const newRawKey = generateRecoveryKey();
+  const newRecoveryHash = await sha256(`sb_rec_${normalizeKey(newRawKey)}`);
+
+  const sessionToken = crypto.randomUUID() + "-" + crypto.randomUUID();
+  const tokenHash = await sha256(sessionToken);
+
+  await context.env.DB.prepare(
+    `UPDATE parents SET password_hash = ?, recovery_key_hash = ?, session_token = ? WHERE id = ?`,
+  ).bind(newPasswordHash, newRecoveryHash, tokenHash, parent.id).run();
+
+  return context.json({ token: sessionToken, email: parent.email, newRecoveryKey: newRawKey });
 });
 
 app.post("/logout", async (context) => {
