@@ -60,7 +60,27 @@ As long as usage remains within Cloudflare's monthly Free Tier, **your bill is $
 
 ---
 
-## 3. Windows Agent & Extension Packaging
+## 3. Parent Console Password Setup & Reset
+
+### First-Time Setup
+When Safe Browse is deployed for the first time:
+1. Visit the deployed dashboard URL (`https://safe-browse-api.as2agents.workers.dev/` or custom domain).
+2. The console detects no master password is set (`requireSetup: true`) and presents the **Create Master Password / PIN** screen.
+3. Type your preferred password or PIN (e.g. a 6-digit PIN or custom passphrase) to lock the console.
+
+### Resetting a Forgotten Password
+If a parent forgets their password or a deployer wants to reset console access:
+Run this command from your terminal to clear the password in D1:
+
+```bash
+npx wrangler d1 execute safe-browse --remote --command "UPDATE parents SET password_hash = NULL, session_token = NULL;" --config apps/worker/wrangler.jsonc
+```
+
+Upon refreshing the dashboard URL, the console will return to **First-Time Setup** mode, prompting for a new Master Password.
+
+---
+
+## 4. Windows Agent & Extension Packaging
 
 1. Build the self-contained x64 Windows service (`SafeBrowse.Service.exe`), Native Host CLI (`SafeBrowse.NativeHost.exe`), Enrollment CLI (`SafeBrowse.Enroll.exe`), and Tray UI (`SafeBrowse.Tray.exe`).
 2. Build the WiX MSI installer project (`apps/windows/installer/Package.wxs`).
