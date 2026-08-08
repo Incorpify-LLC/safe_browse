@@ -80,7 +80,30 @@ Upon refreshing the dashboard URL, the console will return to **First-Time Setup
 
 ---
 
-## 4. Windows Agent & Extension Packaging
+## 4. Cloudflare Turnstile CAPTCHA (Production Keys)
+
+### Why does the widget say *"For testing only. If seen, report to site owner"*?
+By default, the application is pre-configured with Cloudflare's official **Testing Sitekey** (`1x00000000000000000000AA`). Cloudflare intentionally renders this banner on test sitekeys to indicate that dummy verification is active and passes automatically.
+
+### How to Enable Production Turnstile (Free Forever):
+1. In Cloudflare Dashboard, go to **Turnstile** (in the left sidebar) → **Add Site**.
+2. **Site Name**: `Safe Browse Console`
+3. **Domain**: `safe-browse-api.as2agents.workers.dev` (or your custom domain / `*`).
+4. **Widget Type**: 
+   - **Managed** (displays friendly interactive checkmark)
+   - **Invisible** (runs completely invisible in background with zero UI box)
+5. Copy the generated **Site Key** (`0x4AAAAAA...`) and **Secret Key** (`0x4AAAAAA...`).
+6. Set the production keys in Cloudflare Workers:
+   ```bash
+   npx wrangler secret put TURNSTILE_SITE_KEY
+   npx wrangler secret put TURNSTILE_SECRET_KEY
+   ```
+
+Once real production keys are saved, the testing banner disappears immediately!
+
+---
+
+## 5. Windows Agent & Extension Packaging
 
 1. Build the self-contained x64 Windows service (`SafeBrowse.Service.exe`), Native Host CLI (`SafeBrowse.NativeHost.exe`), Enrollment CLI (`SafeBrowse.Enroll.exe`), and Tray UI (`SafeBrowse.Tray.exe`).
 2. Build the WiX MSI installer project (`apps/windows/installer/Package.wxs`).
