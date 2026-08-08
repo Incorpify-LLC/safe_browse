@@ -13,8 +13,6 @@ export async function sendParentSecurityAlert(
   eventType: SecurityEventType,
   details: { ipAddress?: string; userAgent?: string; deviceName?: string; time?: string }
 ): Promise<boolean> {
-  if (!parentEmail || parentEmail.endsWith("@family.local")) return false;
-
   const now = details.time || new Date().toUTCString();
   let subject = "🛡️ Safe Browse Security Alert";
   let bodyText = "";
@@ -72,9 +70,32 @@ export async function sendParentSecurityAlert(
       break;
   }
 
+  let sent = false;
+
   try {
-    // 1. Send via Resend HTTP API (if RESEND_API_KEY configured)
-    if (env.RESEND_API_KEY) {
+    // 1. Send via Telegram Bot Instant Push Alert (Zero Domain, Zero Cost, 100% Mobile Push)
+    if (env.TELEGRAM_BOT_TOKEN && env.TELEGRAM_CHAT_ID) {
+      const telegramMsg = `${subject}\n\n${bodyText}`;
+      const tgRes = await fetch(`https://api.telegram.org/bot${env.TELEGRAM_BOT_TOKEN}/sendMessage`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ chat_id: env.TELEGRAM_CHAT_ID, text: telegramMsg }),
+      });
+      if (tgRes.ok) sent = true;
+    }
+
+    // 2. Send via ntfy.sh Instant Mobile Push Alert (Zero Domain, Zero Cost)
+    if (env.NTFY_TOPIC) {
+      const ntfyRes = await fetch(`https://ntfy.sh/${env.NTFY_TOPIC}`, {
+        method: "POST",
+        headers: { Title: subject, Priority: "high", Tags: "shield,warning" },
+        body: bodyText,
+      });
+      if (ntfyRes.ok) sent = true;
+    }
+
+    // 3. Send via Resend HTTP API (Zero Domain needed using onboarding@resend.dev)
+    if (env.RESEND_API_KEY && parentEmail && !parentEmail.endsWith("@family.local")) {
       const res = await fetch("https://api.resend.com/emails", {
         method: "POST",
         headers: {
@@ -89,11 +110,11 @@ export async function sendParentSecurityAlert(
           text: bodyText,
         }),
       });
-      if (res.ok) return true;
+      if (res.ok) sent = true;
     }
 
-    // 2. Send via Cloudflare Native Email Binding
-    if (env.EMAIL) {
+    // 4. Send via Cloudflare Native Email Binding (Requires custom domain Email Routing)
+    if (env.EMAIL && parentEmail && !parentEmail.endsWith("@family.local")) {
       const mime = [
         `From: ${env.EMAIL_FROM || "Safe Browse Alerts <alerts@safebrowse.family>"}`,
         `To: ${parentEmail}`,
@@ -109,12 +130,12 @@ export async function sendParentSecurityAlert(
         mime
       );
       await env.EMAIL.send(emailMessage);
-      return true;
+      sent = true;
     }
   } catch (err) {
-    console.error("Email send alert error:", err);
+    console.error("Parent security alert error:", err);
   }
-  return false;
+  return sent;
 }
 
 function createAlertTemplate(title: string, description: string, details: { ipAddress?: string; userAgent?: string; time?: string }): string {
