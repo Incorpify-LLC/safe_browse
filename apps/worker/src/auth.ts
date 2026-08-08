@@ -5,23 +5,48 @@ import { sha256 } from "./crypto";
 
 export async function parentAuth(context: Context<{ Bindings: AppBindings; Variables: AppVariables }>, next: Next) {
   const env = context.env;
-  let email: string | undefined;
-  if (env.ENVIRONMENT === "development") {
-    email = context.req.header("Cf-Access-Authenticated-User-Email") ?? "developer@example.test";
-  } else {
-    const assertion = context.req.header("Cf-Access-Jwt-Assertion");
-    if (!assertion) return context.json({ error: "missing_access_assertion" }, 401);
+  const authHeader = context.req.header("Authorization");
+  const accessAssertion = context.req.header("Cf-Access-Jwt-Assertion");
+
+  let parent: { id: string; householdId: string; email: string } | null = null;
+
+  // 1. Session Token Bearer Auth (Direct Password / PIN Login)
+  if (authHeader?.startsWith("Bearer ")) {
+    const token = authHeader.slice(7).trim();
+    if (token) {
+      const tokenHash = await sha256(token);
+      const row = await env.DB.prepare(
+        `SELECT p.id, p.household_id AS householdId, p.email FROM parents p WHERE p.session_token = ?`,
+      ).bind(tokenHash).first<{ id: string; householdId: string; email: string }>();
+      if (row) parent = row;
+    }
+  }
+
+  // 2. Cloudflare Access JWT Assertion Auth
+  if (!parent && accessAssertion) {
     const issuer = `https://${env.ACCESS_TEAM_DOMAIN}`;
     const jwks = createRemoteJWKSet(new URL(`${issuer}/cdn-cgi/access/certs`));
     try {
-      const result = await jwtVerify(assertion, jwks, { issuer, audience: env.ACCESS_AUD });
-      if (typeof result.payload.email !== "string") throw new Error("Missing email claim");
-      email = result.payload.email;
+      const result = await jwtVerify(accessAssertion, jwks, { issuer, audience: env.ACCESS_AUD });
+      if (typeof result.payload.email === "string") {
+        parent = await ensureParent(env.DB, result.payload.email.toLowerCase());
+      }
     } catch {
       return context.json({ error: "invalid_access_assertion" }, 401);
     }
   }
-  const parent = await ensureParent(env.DB, email.toLowerCase());
+
+  // 3. Fallback for Local Dev (only on local dev server 127.0.0.1/localhost)
+  const host = context.req.header("Host") ?? "";
+  if (!parent && env.ENVIRONMENT === "development" && (host.includes("localhost") || host.includes("127.0.0.1"))) {
+    const devEmail = context.req.header("Cf-Access-Authenticated-User-Email") ?? "developer@example.test";
+    parent = await ensureParent(env.DB, devEmail.toLowerCase());
+  }
+
+  if (!parent) {
+    return context.json({ error: "unauthorized", message: "Parent password authentication required" }, 401);
+  }
+
   context.set("parent", parent);
   await next();
 }
@@ -40,7 +65,7 @@ export async function deviceAuth(context: Context<{ Bindings: AppBindings; Varia
   await next();
 }
 
-async function ensureParent(db: D1Database, email: string) {
+export async function ensureParent(db: D1Database, email: string) {
   const existing = await db.prepare(
     `SELECT p.id, p.household_id AS householdId, p.email FROM parents p WHERE p.email = ?`,
   ).bind(email).first<{ id: string; householdId: string; email: string }>();

@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState, type FormEvent } from "react";
 import { ageBands, categories, type AgeBand, type Category } from "@safe-browse/contracts";
-import { api, type AccessRequest, type Child, type HistoryEvent, type PolicyView } from "./api";
+import { api, type AccessRequest, type Child, type HistoryEvent, type PolicyView, type AuthStatus } from "./api";
 
 const ageLabels: Record<AgeBand, string> = { under_10: "Under 10", age_10_12: "10–12", age_13_15: "13–15", age_16_17: "16–17" };
 
@@ -13,17 +13,58 @@ export function App() {
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
 
+  const [authStatus, setAuthStatus] = useState<AuthStatus | null>(null);
+  const [authenticated, setAuthenticated] = useState<boolean>(false);
+
+  const checkAuth = useCallback(async () => {
+    try {
+      const status = await api.authStatus();
+      setAuthStatus(status);
+      return status;
+    } catch {
+      return null;
+    }
+  }, []);
+
   const refresh = useCallback(async () => {
     try {
       const [childData, requestData, eventData] = await Promise.all([api.children(), api.requests(), api.events()]);
-      setChildren(childData.children); setRequests(requestData.requests); setEvents(eventData.events); setError(null);
-    } catch (cause) { setError(cause instanceof Error ? cause.message : "Unable to load Safe Browse"); }
+      setChildren(childData.children);
+      setRequests(requestData.requests);
+      setEvents(eventData.events);
+      setError(null);
+      setAuthenticated(true);
+    } catch (cause) {
+      const msg = cause instanceof Error ? cause.message : "Unable to load Safe Browse";
+      if (msg.includes("401") || msg.includes("unauthorized") || msg.includes("Parent password")) {
+        setAuthenticated(false);
+      } else {
+        setError(msg);
+      }
+    }
   }, []);
-  useEffect(() => { void refresh(); }, [refresh]);
+
+  useEffect(() => {
+    void checkAuth().then((status) => {
+      if (status && !status.requireSetup) {
+        void refresh();
+      }
+    });
+  }, [checkAuth, refresh]);
 
   async function openPolicy(id: string) {
     setBusy(true);
     try { setSelected(await api.policy(id)); } catch (cause) { setError(String(cause)); } finally { setBusy(false); }
+  }
+
+  function handleLogout() {
+    api.logout();
+    setAuthenticated(false);
+    void checkAuth();
+  }
+
+  if (!authenticated) {
+    return <ParentAuthScreen authStatus={authStatus} onAuthenticated={async () => { await checkAuth(); await refresh(); }} />;
   }
 
   return <div className="shell">
@@ -34,7 +75,7 @@ export function App() {
         <button className={section === "history" ? "active" : ""} onClick={() => setSection("history")}>Browsing history</button>
         <button className={section === "requests" ? "active" : ""} onClick={() => setSection("requests")}>Access requests <b>{requests.filter((item) => item.status === "pending").length}</b></button>
       </nav>
-      <div className="privacy-note"><span>◉</span><p><strong>Privacy promise</strong>Only domains and block decisions are collected—never page content.</p></div>
+      <div className="privacy-note"><span>🔒</span><p><strong>Console Protected</strong><button className="text-button" onClick={handleLogout}>Lock console</button></p></div>
     </aside>
     <main>
       <header><div><p className="eyebrow">PARENT DASHBOARD</p><h1>{section === "overview" ? "Your family" : section === "history" ? "Browsing history" : "Access requests"}</h1></div><span className="pilot">Private pilot</span></header>
@@ -45,6 +86,82 @@ export function App() {
     </main>
     {selected && <PolicyDrawer policy={selected} busy={busy} onClose={() => setSelected(null)} onSaved={async () => { setSelected(null); await refresh(); }} />}
   </div>;
+}
+
+function ParentAuthScreen({ authStatus, onAuthenticated }: { authStatus: AuthStatus | null; onAuthenticated(): Promise<void> }) {
+  const [password, setPassword] = useState("");
+  const [email, setEmail] = useState("");
+  const [error, setError] = useState<string | null>(null);
+  const [busy, setBusy] = useState(false);
+
+  const isSetup = authStatus?.requireSetup ?? false;
+
+  async function handleSubmit(e: FormEvent) {
+    e.preventDefault();
+    setError(null);
+    setBusy(true);
+    try {
+      if (isSetup) {
+        await api.setupPassword(password, email || undefined);
+      } else {
+        await api.login(password);
+      }
+      await onAuthenticated();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Authentication failed");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <div className="auth-shell">
+      <form className="auth-card" onSubmit={handleSubmit}>
+        <div className="brand-header">
+          <span className="brand-mark">S</span>
+          <h2>Safe Browse</h2>
+          <p>Parent Control Console</p>
+        </div>
+        
+        {error && <div className="error">{error}</div>}
+
+        <h3>{isSetup ? "Create Master Password" : "Parent Authentication"}</h3>
+        <p className="subtext">
+          {isSetup
+            ? "Set a master password for your household to protect family settings."
+            : "Enter your parent master password to access child profiles and browsing logs."}
+        </p>
+
+        {isSetup && (
+          <label>
+            Parent Email (Optional)
+            <input
+              type="email"
+              placeholder="parent@family.com"
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
+            />
+          </label>
+        )}
+
+        <label>
+          Master Password / PIN
+          <input
+            type="password"
+            placeholder="••••••••"
+            value={password}
+            onChange={(e) => setPassword(e.target.value)}
+            required
+            autoFocus
+          />
+        </label>
+
+        <button className="primary full" type="submit" disabled={busy}>
+          {busy ? "Authenticating..." : isSetup ? "Set Password & Enter" : "Unlock Console"}
+        </button>
+      </form>
+    </div>
+  );
 }
 
 function Overview({ children, onOpen, onRefresh }: { children: Child[]; onOpen(id: string): void; onRefresh(): Promise<void> }) {

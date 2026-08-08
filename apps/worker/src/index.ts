@@ -2,6 +2,7 @@ import { Hono } from "hono";
 import type { AppBindings, AppVariables } from "./types";
 import parentRoutes from "./routes/parent";
 import deviceRoutes from "./routes/device";
+import authRoutes from "./routes/auth";
 import { runScheduled } from "./scheduled";
 
 const app = new Hono<{ Bindings: AppBindings; Variables: AppVariables }>();
@@ -17,6 +18,7 @@ app.use("*", async (context, next) => {
 });
 
 app.get("/health", (context) => context.json({ ok: true, service: "safe-browse-api" }));
+app.route("/api/v1/auth", authRoutes);
 app.route("/api/v1/parent", parentRoutes);
 app.route("/api/v1/device", deviceRoutes);
 app.notFound((context) => context.env.ASSETS.fetch(context.req.raw));

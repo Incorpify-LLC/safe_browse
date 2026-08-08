@@ -13,20 +13,70 @@ export type PolicyView = {
   rules: { id: string; domain: string; action: "allow" | "block"; expiresAt: string | null }[];
 };
 
+export type AuthStatus = {
+  hasPassword: boolean;
+  parentCount: number;
+  requireSetup: boolean;
+};
+
+function getAuthHeader(): Record<string, string> {
+  const token = localStorage.getItem("sb_parent_token");
+  return token ? { Authorization: `Bearer ${token}` } : {};
+}
+
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
   const response = await fetch(`/api/v1/parent${path}`, {
     ...init,
-    headers: { "Content-Type": "application/json", ...init?.headers },
+    headers: { "Content-Type": "application/json", ...getAuthHeader(), ...init?.headers },
     credentials: "same-origin",
   });
   if (!response.ok) {
-    const problem = await response.json().catch(() => ({})) as { error?: string };
-    throw new Error(problem.error ?? `Request failed (${response.status})`);
+    const problem = await response.json().catch(() => ({})) as { error?: string; message?: string };
+    throw new Error(problem.message ?? problem.error ?? `Request failed (${response.status})`);
   }
   return response.status === 204 ? undefined as T : response.json() as Promise<T>;
 }
 
 export const api = {
+  authStatus: async () => {
+    const res = await fetch("/api/v1/auth/status", { headers: getAuthHeader() });
+    return res.json() as Promise<AuthStatus>;
+  },
+  setupPassword: async (password: string, email?: string) => {
+    const res = await fetch("/api/v1/auth/setup", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ password, email }),
+    });
+    if (!res.ok) {
+      const data = await res.json().catch(() => ({})) as { error?: string; message?: string };
+      throw new Error(data.message ?? data.error ?? "Password setup failed");
+    }
+    const data = await res.json() as { token: string; email: string };
+    localStorage.setItem("sb_parent_token", data.token);
+    return data;
+  },
+  login: async (password: string) => {
+    const res = await fetch("/api/v1/auth/login", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ password }),
+    });
+    if (!res.ok) {
+      const data = await res.json().catch(() => ({})) as { error?: string; message?: string };
+      throw new Error(data.message ?? data.error ?? "Incorrect password");
+    }
+    const data = await res.json() as { token: string; email: string };
+    localStorage.setItem("sb_parent_token", data.token);
+    return data;
+  },
+  logout: () => {
+    const token = localStorage.getItem("sb_parent_token");
+    if (token) {
+      void fetch("/api/v1/auth/logout", { method: "POST", headers: getAuthHeader() });
+    }
+    localStorage.removeItem("sb_parent_token");
+  },
   children: () => request<{ children: Child[] }>("/children"),
   createChild: (body: { name: string; ageBand: AgeBand; timezone: string }) => request<{ id: string }>("/children", { method: "POST", body: JSON.stringify(body) }),
   policy: (id: string) => request<PolicyView>(`/children/${id}/policy`),
