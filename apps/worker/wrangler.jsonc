@@ -22,7 +22,7 @@
     {
       "binding": "DB",
       "database_name": "safe-browse",
-      "database_id": "00000000-0000-0000-0000-000000000000",
+      "database_id": "85d7acbc-1c5e-4968-8e93-2a9fe5aba861",
       "migrations_dir": "migrations"
     }
   ],

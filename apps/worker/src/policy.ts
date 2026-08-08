@@ -59,7 +59,8 @@ export async function buildPolicy(db: D1Database, childId: string, listVersion: 
   };
 }
 
-export async function latestListVersion(bucket: R2Bucket): Promise<string> {
+export async function latestListVersion(bucket?: R2Bucket): Promise<string> {
+  if (!bucket) return "bootstrap";
   const object = await bucket.get("lists/latest.json");
   if (!object) return "bootstrap";
   const metadata = await object.json<{ version?: string }>();

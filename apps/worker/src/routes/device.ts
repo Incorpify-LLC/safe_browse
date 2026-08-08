@@ -132,12 +132,14 @@ app.get("/access-requests/:id", async (context) => {
 });
 
 app.get("/lists/manifest", async (context) => {
+  if (!context.env.LISTS) return context.json({ error: "list_not_ready" }, 503);
   const object = await context.env.LISTS.get("lists/latest.json");
   if (!object) return context.json({ error: "list_not_ready" }, 503);
   return new Response(object.body, { headers: { "Content-Type": "application/json", "ETag": object.httpEtag, "Cache-Control": "private, max-age=300" } });
 });
 
 app.get("/lists/:version/:file", async (context) => {
+  if (!context.env.LISTS) return context.json({ error: "not_found" }, 404);
   const version = context.req.param("version");
   const file = context.req.param("file");
   if (!/^[a-zA-Z0-9._-]+$/.test(version) || !/^[a-zA-Z0-9._-]+$/.test(file)) return context.json({ error: "invalid_path" }, 400);
