@@ -3,8 +3,12 @@ using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
 
-if (args.Length < 2) { Console.Error.WriteLine("Usage: SafeBrowse.Enroll <device-api-base-url> <six-digit-code> [device-name]"); return 2; }
-var api = args[0].TrimEnd('/') + "/api/v1/device/enroll"; var name = args.Length > 2 ? args[2] : Environment.MachineName;
+var baseUrl = args[0].TrimEnd('/');
+if (baseUrl.EndsWith("/api/v1/device/enroll", StringComparison.OrdinalIgnoreCase)) { /* full endpoint passed */ }
+else if (baseUrl.EndsWith("/api/v1/device", StringComparison.OrdinalIgnoreCase)) { baseUrl += "/enroll"; }
+else { baseUrl += "/api/v1/device/enroll"; }
+var api = baseUrl;
+var name = args.Length > 2 ? args[2] : Environment.MachineName;
 using var client = new HttpClient();
 using var response = await client.PostAsJsonAsync(api, new { code = args[1], deviceName = name, platform = "windows", agentVersion = "0.1.0" });
 if (!response.IsSuccessStatusCode) { Console.Error.WriteLine(await response.Content.ReadAsStringAsync()); return 1; }

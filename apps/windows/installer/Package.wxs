@@ -2,19 +2,35 @@
   <Package Name="Safe Browse" Manufacturer="Incorpify LLC" Version="0.1.0" UpgradeCode="C75EDBF5-E5BB-445D-A40D-E64310E9E76D" Scope="perMachine">
     <MajorUpgrade DowngradeErrorMessage="A newer Safe Browse version is already installed." />
     <MediaTemplate EmbedCab="yes" />
-    <StandardDirectory Id="ProgramFiles64Folder"><Directory Id="INSTALLFOLDER" Name="Safe Browse">
-      <Component Id="ServiceFiles" Guid="*">
-        <File Id="ServiceExe" Source="..\artifacts\service\SafeBrowse.Service.exe" KeyPath="yes" />
-        <File Source="..\artifacts\service\appsettings.json" />
-        <ServiceInstall Id="SafeBrowseServiceInstall" Name="Safe Browse Protection" DisplayName="Safe Browse Protection" Description="Local parental-control DNS filtering" Start="auto" Type="ownProcess" ErrorControl="normal" Account="LocalSystem" />
-        <ServiceControl Id="SafeBrowseServiceControl" Name="Safe Browse Protection" Start="install" Stop="both" Remove="uninstall" Wait="yes" />
-      </Component>
-      <Component Id="ClientFiles" Guid="*">
-        <File Source="..\artifacts\native-host\SafeBrowse.NativeHost.exe" />
-        <File Source="..\artifacts\enroll\SafeBrowse.Enroll.exe" />
-        <File Source="..\artifacts\tray\SafeBrowse.Tray.exe" />
-      </Component>
-    </Directory></StandardDirectory>
-    <Feature Id="ProductFeature" Title="Safe Browse" Level="1"><ComponentRef Id="ServiceFiles" /><ComponentRef Id="ClientFiles" /></Feature>
+    <StandardDirectory Id="ProgramFiles64Folder">
+      <Directory Id="INSTALLFOLDER" Name="Safe Browse">
+        <Component Id="ServiceFiles" Guid="*">
+          <File Id="ServiceExe" Source="..\artifacts\service\SafeBrowse.Service.exe" KeyPath="yes" />
+          <File Source="..\artifacts\service\appsettings.json" />
+          <ServiceInstall Id="SafeBrowseServiceInstall" Name="Safe Browse Protection" DisplayName="Safe Browse Protection" Description="Local parental-control DNS filtering" Start="auto" Type="ownProcess" ErrorControl="normal" Account="LocalSystem" />
+          <ServiceControl Id="SafeBrowseServiceControl" Name="Safe Browse Protection" Start="install" Stop="both" Remove="uninstall" Wait="yes" />
+        </Component>
+        <Component Id="NativeHostComponent" Guid="*">
+          <File Id="NativeHostExe" Source="..\artifacts\native-host\SafeBrowse.NativeHost.exe" KeyPath="yes" />
+          <File Id="ChromiumManifest" Source="..\artifacts\native-host\com.incorpify.safebrowse.chromium.json" />
+          <File Id="FirefoxManifest" Source="..\artifacts\native-host\com.incorpify.safebrowse.firefox.json" />
+          <RegistryValue Root="HKLM" Key="SOFTWARE\Google\Chrome\NativeMessagingHosts\com.incorpify.safebrowse" Type="string" Value="[#ChromiumManifest]" />
+          <RegistryValue Root="HKLM" Key="SOFTWARE\Microsoft\Edge\NativeMessagingHosts\com.incorpify.safebrowse" Type="string" Value="[#ChromiumManifest]" />
+          <RegistryValue Root="HKLM" Key="SOFTWARE\Mozilla\NativeMessagingHosts\com.incorpify.safebrowse" Type="string" Value="[#FirefoxManifest]" />
+        </Component>
+        <Component Id="EnrollComponent" Guid="*">
+          <File Id="EnrollExe" Source="..\artifacts\enroll\SafeBrowse.Enroll.exe" KeyPath="yes" />
+        </Component>
+        <Component Id="TrayComponent" Guid="*">
+          <File Id="TrayExe" Source="..\artifacts\tray\SafeBrowse.Tray.exe" KeyPath="yes" />
+        </Component>
+      </Directory>
+    </StandardDirectory>
+    <Feature Id="ProductFeature" Title="Safe Browse" Level="1">
+      <ComponentRef Id="ServiceFiles" />
+      <ComponentRef Id="NativeHostComponent" />
+      <ComponentRef Id="EnrollComponent" />
+      <ComponentRef Id="TrayComponent" />
+    </Feature>
   </Package>
 </Wix>

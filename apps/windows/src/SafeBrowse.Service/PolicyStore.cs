@@ -11,7 +11,19 @@ public sealed class PolicyStore
     private readonly string _directory;
     public PolicyStore(IOptions<AgentOptions> options) { _directory = options.Value.DataDirectory; Directory.CreateDirectory(_directory); }
     public void Save(Policy policy) => AtomicWrite(Path.Combine(_directory, "policy.json"), JsonSerializer.SerializeToUtf8Bytes(policy, Json));
-    public Policy? Load() => File.Exists(Path.Combine(_directory, "policy.json")) ? JsonSerializer.Deserialize<Policy>(File.ReadAllBytes(Path.Combine(_directory, "policy.json")), Json) : null;
+    public Policy? Load()
+    {
+        var path = Path.Combine(_directory, "policy.json");
+        if (!File.Exists(path)) return null;
+        try
+        {
+            return JsonSerializer.Deserialize<Policy>(File.ReadAllBytes(path), Json);
+        }
+        catch
+        {
+            return null;
+        }
+    }
     public IReadOnlyDictionary<Category, HashSet<string>> LoadLists()
     {
         var output = new Dictionary<Category, HashSet<string>>();
@@ -22,7 +34,11 @@ public sealed class PolicyStore
             using var stream = new GZipStream(File.OpenRead(path), CompressionMode.Decompress);
             using var reader = new StreamReader(stream);
             var entries = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-            while (reader.ReadLine() is { } line) if (line.Length > 0) entries.Add(line);
+            while (reader.ReadLine() is { } line)
+            {
+                var trimmed = line.Trim();
+                if (trimmed.Length > 0 && !trimmed.StartsWith('#')) entries.Add(trimmed);
+            }
             output[category] = entries;
         }
         return output;

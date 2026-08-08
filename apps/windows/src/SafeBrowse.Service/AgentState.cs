@@ -20,7 +20,7 @@ public sealed class AgentState
         lock (_gate)
         {
             if (_emergencyUntil > DateTimeOffset.UtcNow) return FilterDecision.Allow(domain, "emergency_bypass");
-            var decision = _evaluator?.Evaluate(domain, DateTimeOffset.UtcNow) ?? FilterDecision.Block(domain, null, "policy_unavailable");
+            var decision = _evaluator?.Evaluate(domain, DateTimeOffset.UtcNow) ?? FilterDecision.Allow(domain, "bootstrap_unenrolled");
             _recent[domain] = decision;
             if (_recent.Count > 512) _recent.Remove(_recent.Keys.First());
             return decision;

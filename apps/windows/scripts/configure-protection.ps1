@@ -14,11 +14,17 @@ if ($Action -eq 'Install') {
   New-Item -Force 'HKLM:\Software\Policies\Google\Chrome' | Out-Null
   New-ItemProperty -Force 'HKLM:\Software\Policies\Google\Chrome' -Name DnsOverHttpsMode -Value off | Out-Null
   @(
-    @{ Name='Safe Browse - Block direct DNS UDP'; Protocol='UDP'; Ports='53,853' },
-    @{ Name='Safe Browse - Block direct DNS TCP'; Protocol='TCP'; Ports='53,853' }
+    @{ Name='Safe Browse - Allow Service DNS UDP'; Protocol='UDP'; Ports=@('53','853'); Action='Allow' },
+    @{ Name='Safe Browse - Allow Service DNS TCP'; Protocol='TCP'; Ports=@('53','853'); Action='Allow' },
+    @{ Name='Safe Browse - Block direct DNS UDP'; Protocol='UDP'; Ports=@('53','853'); Action='Block' },
+    @{ Name='Safe Browse - Block direct DNS TCP'; Protocol='TCP'; Ports=@('53','853'); Action='Block' }
   ) | ForEach-Object {
     Remove-NetFirewallRule -DisplayName $_.Name -ErrorAction SilentlyContinue
-    New-NetFirewallRule -DisplayName $_.Name -Direction Outbound -Action Block -Protocol $_.Protocol -RemotePort $_.Ports | Out-Null
+    if ($_.Action -eq 'Allow') {
+      New-NetFirewallRule -DisplayName $_.Name -Direction Outbound -Action Allow -Protocol $_.Protocol -RemotePort $_.Ports -Program "$env:ProgramFiles\Safe Browse\SafeBrowse.Service.exe" | Out-Null
+    } else {
+      New-NetFirewallRule -DisplayName $_.Name -Direction Outbound -Action Block -Protocol $_.Protocol -RemotePort $_.Ports | Out-Null
+    }
   }
 } else {
   if (Test-Path $backupPath) {
@@ -30,6 +36,8 @@ if ($Action -eq 'Install') {
   }
   Remove-ItemProperty 'HKLM:\Software\Policies\Microsoft\Edge' -Name DnsOverHttpsMode -ErrorAction SilentlyContinue
   Remove-ItemProperty 'HKLM:\Software\Policies\Google\Chrome' -Name DnsOverHttpsMode -ErrorAction SilentlyContinue
+  Remove-NetFirewallRule -DisplayName 'Safe Browse - Allow Service DNS UDP' -ErrorAction SilentlyContinue
+  Remove-NetFirewallRule -DisplayName 'Safe Browse - Allow Service DNS TCP' -ErrorAction SilentlyContinue
   Remove-NetFirewallRule -DisplayName 'Safe Browse - Block direct DNS UDP' -ErrorAction SilentlyContinue
   Remove-NetFirewallRule -DisplayName 'Safe Browse - Block direct DNS TCP' -ErrorAction SilentlyContinue
 }

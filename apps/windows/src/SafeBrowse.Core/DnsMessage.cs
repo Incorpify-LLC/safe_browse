@@ -24,8 +24,8 @@ public static class DnsMessage
     {
         var response = query.ToArray();
         if (response.Length < 12) throw new InvalidDataException("Invalid DNS packet");
-        response[2] = (byte)((response[2] & 0x79) | 0x80);
-        response[3] = (byte)((response[3] & 0xf0) | 0x03); // NXDOMAIN
+        response[2] |= 0x80; // Set QR = 1 (Response)
+        response[3] = (byte)((response[3] & 0x70) | 0x80 | 0x03); // Set RA = 1, RCODE = 3 (NXDOMAIN)
         response[6] = response[7] = response[8] = response[9] = response[10] = response[11] = 0;
         return response;
     }
