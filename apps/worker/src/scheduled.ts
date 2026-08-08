@@ -5,6 +5,7 @@ export async function runScheduled(controller: ScheduledController, env: Env, ct
   if (controller.cron === "17 2 * * *") {
     const cutoff = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000).toISOString();
     const idempotencyCutoff = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000).toISOString();
+    const rateLimitCutoff = now.getTime() - 24 * 60 * 60 * 1000;
     await env.DB.batch([
       env.DB.prepare("DELETE FROM events WHERE occurred_at < ?").bind(cutoff),
       env.DB.prepare("DELETE FROM audit_log WHERE created_at < ?").bind(cutoff),
@@ -12,6 +13,7 @@ export async function runScheduled(controller: ScheduledController, env: Env, ct
       env.DB.prepare("DELETE FROM enrollment_codes WHERE expires_at < ?").bind(now.toISOString()),
       env.DB.prepare("DELETE FROM domain_rules WHERE expires_at IS NOT NULL AND expires_at < ?").bind(now.toISOString()),
       env.DB.prepare("DELETE FROM idempotency_keys WHERE created_at < ?").bind(idempotencyCutoff),
+      env.DB.prepare("DELETE FROM rate_limits WHERE updated_at < ?").bind(rateLimitCutoff),
     ]);
     console.log(JSON.stringify({ message: "retention_complete", cutoff }));
     return;

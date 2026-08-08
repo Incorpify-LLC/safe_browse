@@ -9,6 +9,11 @@
 # Or pass the token inline:
 #   CLOUDFLARE_API_TOKEN="cfat_..." bash tools/deploy.sh
 #
+# Operator nuclear reset (lost authenticator phone):
+#   bash tools/deploy.sh --reset-parent-auth
+#   Clears parent PIN, TOTP, recovery key, and sessions in remote D1.
+#   Does NOT redeploy the Worker unless you also pass --deploy (or run deploy after).
+#
 # Requirements: node >= 18, npm, curl, jq
 # =============================================================================
 set -euo pipefail
@@ -21,6 +26,32 @@ log()  { echo -e "${CYAN}[safe-browse]${RESET} $*"; }
 ok()   { echo -e "${GREEN}[✔]${RESET} $*"; }
 warn() { echo -e "${YELLOW}[!]${RESET} $*"; }
 die()  { echo -e "${RED}[✘] $*${RESET}" >&2; exit 1; }
+
+RESET_PARENT_AUTH=0
+RUN_FULL_DEPLOY=1
+for arg in "$@"; do
+  case "${arg}" in
+    --reset-parent-auth) RESET_PARENT_AUTH=1; RUN_FULL_DEPLOY=0 ;;
+    --reset-parent-auth-and-deploy) RESET_PARENT_AUTH=1; RUN_FULL_DEPLOY=1 ;;
+    --help|-h)
+      cat <<'EOF'
+Safe Browse deploy
+
+  bash tools/deploy.sh
+      Full one-click deploy (D1, R2, Turnstile, Worker, dashboard).
+
+  bash tools/deploy.sh --reset-parent-auth
+      Operator break-glass: wipe parent PIN + TOTP + recovery key + sessions
+      in remote D1. Requires CLOUDFLARE_API_TOKEN. Does not redeploy.
+
+  bash tools/deploy.sh --reset-parent-auth-and-deploy
+      Wipe parent auth, then run a full deploy.
+EOF
+      exit 0
+      ;;
+    *) die "Unknown argument: ${arg}. Try --help." ;;
+  esac
+done
 
 # ── Banner ───────────────────────────────────────────────────────────────────
 echo -e "${BOLD}"
@@ -90,6 +121,37 @@ wrangler_run() {
   CLOUDFLARE_ACCOUNT_ID="${CLOUDFLARE_ACCOUNT_ID}" \
   npx --yes wrangler@latest "$@" --config "${WRANGLER_CONFIG}"
 }
+
+# ── Operator break-glass: reset parent PIN + TOTP ─────────────────────────────
+# Requires Cloudflare API token (not a public endpoint). After this, open the
+# dashboard and complete first-time setup + mandatory authenticator link again.
+if [[ "${RESET_PARENT_AUTH}" -eq 1 ]]; then
+  echo ""
+  warn "This will CLEAR parent PIN, authenticator (TOTP), recovery key, and sessions."
+  warn "Family policies and device enrollments are NOT deleted."
+  echo ""
+  read -r -p "  Type RESET to continue: " confirm
+  [[ "${confirm}" == "RESET" ]] || die "Aborted (confirmation was not RESET)."
+
+  log "Wiping parent auth columns in remote D1 (safe-browse)..."
+  wrangler_run d1 execute safe-browse --remote --command \
+    "UPDATE parents SET password_hash = NULL, recovery_key_hash = NULL, totp_secret = NULL, session_token = NULL;" \
+    || die "Failed to reset parent auth. Ensure D1 database 'safe-browse' exists and the token has D1 write access."
+  ok "Parent auth cleared."
+  echo ""
+  echo -e "  ${BOLD}Next:${RESET} open your dashboard URL → create a new PIN → link authenticator app."
+  echo -e "  (Primary recovery is TOTP; paper key is optional; this operator wipe is last resort.)"
+  echo ""
+  if [[ "${RUN_FULL_DEPLOY}" -eq 0 ]]; then
+    ok "Done (--reset-parent-auth only; Worker not redeployed)."
+    exit 0
+  fi
+  log "Continuing with full deploy..."
+fi
+
+if [[ "${RUN_FULL_DEPLOY}" -eq 0 ]]; then
+  die "Internal error: nothing to do"
+fi
 
 # ── Step 4: Create / verify D1 database ───────────────────────────────────────
 log "Setting up D1 database (safe-browse)..."
@@ -209,9 +271,12 @@ echo -e "  ${BOLD}Turnstile:${RESET}      ${TURNSTILE_SITE_KEY}"
 echo ""
 echo -e "  ${BOLD}Next steps:${RESET}"
 echo "  1. Open the dashboard URL above in your browser."
-echo "  2. Create your Parent Master Password on first visit."
-echo "  3. Install the Windows agent on your child's device."
-echo "  4. Enroll the device using the code from the dashboard."
+echo "  2. Create your Parent Master PIN (one time)."
+echo "  3. Link an authenticator app (required — this is how you recover a forgotten PIN)."
+echo "  4. Install the Windows agent and enroll with a dashboard code."
 echo ""
-echo -e "  ${CYAN}See docs/deployment.md for full documentation.${RESET}"
+echo -e "  ${BOLD}Lost authenticator phone?${RESET}"
+echo "  bash tools/deploy.sh --reset-parent-auth"
+echo ""
+echo -e "  ${CYAN}See docs/parent-auth.md and docs/deployment.md.${RESET}"
 echo ""

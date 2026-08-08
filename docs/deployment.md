@@ -92,23 +92,26 @@ As long as usage remains within Cloudflare's monthly Free Tier, **your bill is $
 
 ---
 
-## 3. Parent Console Password Setup & Reset
+## 3. Parent Console Auth (email-less)
+
+See the full **three-key ladder** in [parent-auth.md](./parent-auth.md).
 
 ### First-Time Setup
-When Safe Browse is deployed for the first time:
-1. Visit the deployed dashboard URL (`https://safe-browse-api.as2agents.workers.dev/` or custom domain).
-2. The console detects no master password is set (`requireSetup: true`) and presents the **Create Master Password / PIN** screen.
-3. Type your preferred password or PIN (e.g. a 6-digit PIN or custom passphrase) to lock the console.
+1. Open the dashboard URL.
+2. Create a master PIN / password (**once only**).
+3. Optionally save the paper recovery key.
+4. **Required:** link a TOTP authenticator app and confirm a code.
+5. Console APIs refuse access until TOTP is linked.
 
-### Resetting a Forgotten Password
-If a parent forgets their password or a deployer wants to reset console access:
-Run this command from your terminal to clear the password in D1:
+### Forgot PIN
+Use the authenticator app on the login screen (primary). Paper recovery key is secondary.
 
+### Lost authenticator phone (operator)
 ```bash
-npx wrangler d1 execute safe-browse --remote --command "UPDATE parents SET password_hash = NULL, session_token = NULL;" --config apps/worker/wrangler.jsonc
+export CLOUDFLARE_API_TOKEN="..."
+bash tools/deploy.sh --reset-parent-auth
 ```
-
-Upon refreshing the dashboard URL, the console will return to **First-Time Setup** mode, prompting for a new Master Password.
+Then complete first-time setup again. This requires your Cloudflare token — it is not a public reset.
 
 ---
 

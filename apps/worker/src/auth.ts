@@ -11,14 +11,21 @@ export async function parentAuth(context: Context<{ Bindings: AppBindings; Varia
   let parent: { id: string; householdId: string; email: string } | null = null;
 
   // 1. Session Token Bearer Auth (Direct Password / PIN Login)
+  let totpSecret: string | null | undefined;
+  let hasPassword = false;
   if (authHeader?.startsWith("Bearer ")) {
     const token = authHeader.slice(7).trim();
     if (token) {
       const tokenHash = await sha256(token);
       const row = await env.DB.prepare(
-        `SELECT p.id, p.household_id AS householdId, p.email FROM parents p WHERE p.session_token = ?`,
-      ).bind(tokenHash).first<{ id: string; householdId: string; email: string }>();
-      if (row) parent = row;
+        `SELECT p.id, p.household_id AS householdId, p.email, p.totp_secret AS totpSecret, p.password_hash AS passwordHash
+         FROM parents p WHERE p.session_token = ?`,
+      ).bind(tokenHash).first<{ id: string; householdId: string; email: string; totpSecret: string | null; passwordHash: string | null }>();
+      if (row) {
+        parent = { id: row.id, householdId: row.householdId, email: row.email };
+        totpSecret = row.totpSecret;
+        hasPassword = Boolean(row.passwordHash);
+      }
     }
   }
 
@@ -45,6 +52,16 @@ export async function parentAuth(context: Context<{ Bindings: AppBindings; Varia
 
   if (!parent) {
     return context.json({ error: "unauthorized", message: "Parent password authentication required" }, 401);
+  }
+
+  // Onboarding incomplete: password-based parents must link TOTP before console APIs.
+  // (Cloudflare Access JWT parents without a PIN are not forced through this ladder.)
+  // TOTP setup lives under /api/v1/auth/* and does not use this middleware.
+  if (hasPassword && !totpSecret) {
+    return context.json({
+      error: "totp_required",
+      message: "Link your authenticator app before using the parent console.",
+    }, 403);
   }
 
   context.set("parent", parent);

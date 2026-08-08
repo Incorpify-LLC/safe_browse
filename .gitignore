@@ -10,6 +10,15 @@ coverage/
 bin/
 obj/
 artifacts/
-*.msi
 *.pfx
 *.tsbuildinfo
+
+# Local full release tree (self-contained exes); MSI lives under apps/windows/releases via LFS
+/release/
+tools/__pycache__/
+
+# Large MSI packages (tracked selectively via Git LFS under apps/windows/releases/)
+*.msi
+!apps/windows/releases/
+!apps/windows/releases/**
+!apps/windows/releases/**/*.msi

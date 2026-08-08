@@ -6,10 +6,21 @@ import { isResponse, parseJson } from "../http";
 import { randomToken, sha256 } from "../crypto";
 import { buildPolicy, latestListVersion } from "../policy";
 import { sendAccessRequestEmail } from "../email";
+import { checkRateLimit, clearRateLimit, clientIp, recordFailure } from "../rate-limit";
 
 const app = new Hono<{ Bindings: AppBindings; Variables: AppVariables }>();
 
 app.post("/enroll", async (context) => {
+  const ip = clientIp(context.req.raw.headers);
+  const limited = await checkRateLimit(context.env.DB, "enroll", ip);
+  if (!limited.allowed) {
+    return context.json({
+      error: "rate_limited",
+      message: `Too many enrollment attempts. Try again in about ${Math.ceil(limited.retryAfterSec / 60)} minute(s).`,
+      retryAfterSec: limited.retryAfterSec,
+    }, 429);
+  }
+
   const body = await parseJson(context, enrollmentSchema);
   if (isResponse(body)) return body;
   const codeHash = await sha256(body.code);
@@ -19,12 +30,29 @@ app.post("/enroll", async (context) => {
      FROM enrollment_codes e JOIN children c ON c.id=e.child_id
      WHERE e.code_hash=? AND e.consumed_at IS NULL AND e.expires_at>?`,
   ).bind(codeHash, now).first<{ id: string; childId: string; householdId: string }>();
-  if (!enrollment) return context.json({ error: "invalid_or_expired_code" }, 400);
+  if (!enrollment) {
+    const after = await recordFailure(context.env.DB, "enroll", ip);
+    if (!after.allowed) {
+      return context.json({
+        error: "rate_limited",
+        message: `Too many enrollment attempts. Try again in about ${Math.ceil(after.retryAfterSec / 60)} minute(s).`,
+        retryAfterSec: after.retryAfterSec,
+      }, 429);
+    }
+    return context.json({ error: "invalid_or_expired_code" }, 400);
+  }
 
   const token = randomToken();
   const deviceId = crypto.randomUUID();
+  const consume = await context.env.DB.prepare(
+    "UPDATE enrollment_codes SET consumed_at=? WHERE id=? AND consumed_at IS NULL",
+  ).bind(now, enrollment.id).run();
+  if (!consume.meta.changes) {
+    await recordFailure(context.env.DB, "enroll", ip);
+    return context.json({ error: "invalid_or_expired_code" }, 400);
+  }
+
   await context.env.DB.batch([
-    context.env.DB.prepare("UPDATE enrollment_codes SET consumed_at=? WHERE id=? AND consumed_at IS NULL").bind(now, enrollment.id),
     context.env.DB.prepare("UPDATE devices SET revoked_at=? WHERE child_id=? AND revoked_at IS NULL").bind(now, enrollment.childId),
     context.env.DB.prepare(
       `INSERT INTO devices(id,child_id,name,platform,credential_hash,agent_version,last_seen_at,created_at)
@@ -34,6 +62,7 @@ app.post("/enroll", async (context) => {
       "INSERT INTO audit_log(id,household_id,actor_type,actor_id,action,target_id,detail_json,created_at) VALUES(?,?,?,?,?,?,?,?)",
     ).bind(crypto.randomUUID(), enrollment.householdId, "device", deviceId, "device.enrolled", deviceId, "{}", now),
   ]);
+  await clearRateLimit(context.env.DB, "enroll", ip);
   const listVersion = await latestListVersion(context.env.LISTS);
   const policy = await buildPolicy(context.env.DB, enrollment.childId, listVersion);
   return context.json({ deviceId, token, policy }, 201);

@@ -290,14 +290,15 @@ def inject_test_policy(remote: Remote) -> None:
 $ErrorActionPreference = 'Stop'
 $dir = '{DATA_DIR}'
 New-Item -ItemType Directory -Path $dir -Force | Out-Null
+# Wire format matches packages/contracts (Worker buildPolicy)
 $policy = @{{
   version = 1
   childId = '00000000-0000-0000-0000-000000000001'
   ageBand = 'age_10_12'
   timezone = 'UTC'
-  blockedCategories = @('Anime')
-  schedule = @()
-  rules = @(
+  enabledCategories = @('anime', 'adult')
+  schedules = @()
+  domainRules = @(
     @{{ domain = 'blocked-test-domain.com'; action = 'block'; expiresAt = $null }},
     @{{ domain = 'allow-override.example'; action = 'allow'; expiresAt = $null }}
   )
@@ -305,21 +306,26 @@ $policy = @{{
   youtubeRestricted = $true
   paused = $false
   listVersion = 'test'
-  updatedAt = (Get-Date).ToUniversalTime().ToString('o')
+  generatedAt = (Get-Date).ToUniversalTime().ToString('o')
 }} | ConvertTo-Json -Depth 6
 [System.IO.File]::WriteAllText((Join-Path $dir 'policy.json'), $policy)
 
-# Create category list file with comments to test GZip + comment stripping
+# Create category list files with comments to test GZip + comment stripping
 $listsDir = Join-Path $dir 'lists'
 New-Item -ItemType Directory -Path $listsDir -Force | Out-Null
-$animeGz = Join-Path $listsDir 'anime.txt.gz'
-$rawText = "# Comment line`nblocked-anime-site.test`n"
-$bytes = [System.Text.Encoding]::UTF8.GetBytes($rawText)
-$ms = New-Object System.IO.MemoryStream
-$gz = New-Object System.IO.Compression.GZipStream($ms, [System.IO.Compression.CompressionLevel]::Optimal)
-$gz.Write($bytes, 0, $bytes.Length)
-$gz.Close()
-[System.IO.File]::WriteAllBytes($animeGz, $ms.ToArray())
+function Write-ListGz($name, $domains) {{
+  $path = Join-Path $listsDir $name
+  $rawText = "# Comment line`n" + ($domains -join "`n") + "`n"
+  $bytes = [System.Text.Encoding]::UTF8.GetBytes($rawText)
+  $ms = New-Object System.IO.MemoryStream
+  $gz = New-Object System.IO.Compression.GZipStream($ms, [System.IO.Compression.CompressionLevel]::Optimal)
+  $gz.Write($bytes, 0, $bytes.Length)
+  $gz.Close()
+  [System.IO.File]::WriteAllBytes($path, $ms.ToArray())
+}}
+Write-ListGz 'anime.txt.gz' @('blocked-anime-site.test')
+# Sample adult domains for profanity/adult block smoke tests (not a full feed)
+Write-ListGz 'adult.txt.gz' @('pornhub.com', 'xvideos.com', 'xnxx.com', 'xhamster.com', 'redtube.com')
 
 # Restart service so policy is loaded (force if needed)
 $svc = '{SERVICE_NAME}'
@@ -427,6 +433,22 @@ if ($lines) { 'OK' } else { 'NOT_LISTENING' }
         or "can't find" in text.lower()
     )
     report.add("DNS NXDOMAIN for category-blocked domain", cat_block_ok, text[:400])
+
+    # 8b. Adult / profane sample domains (category adult list)
+    print("[8b] DNS adult category blocks (pornhub.com, xvideos.com)")
+    adult_ok_all = True
+    adult_details = []
+    for domain in ("pornhub.com", "xvideos.com", "www.pornhub.com"):
+        code, out, err = remote.run(f"nslookup {domain} 127.0.0.1", timeout=30)
+        text = remote.combined(out, err)
+        blocked = (
+            "Non-existent domain" in text
+            or "NXDOMAIN" in text
+            or "can't find" in text.lower()
+        )
+        adult_ok_all = adult_ok_all and blocked
+        adult_details.append(f"{domain}:{'BLOCK' if blocked else 'ALLOW'} {text[:120]}")
+    report.add("DNS NXDOMAIN for adult/profane sample domains", adult_ok_all, " | ".join(adult_details)[:500])
 
     # 9. Named pipe evaluate
     print("[9] Named pipe evaluate")

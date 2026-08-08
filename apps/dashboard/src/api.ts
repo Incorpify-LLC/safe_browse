@@ -18,6 +18,8 @@ export type AuthStatus = {
   hasTotpBackup: boolean;
   parentCount: number;
   requireSetup: boolean;
+  /** Password exists (or session) but authenticator not linked yet */
+  requireTotp: boolean;
   turnstileSiteKey?: string;
 };
 
