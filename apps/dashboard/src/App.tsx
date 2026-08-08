@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState, type FormEvent } from "react";
+import { useCallback, useEffect, useRef, useState, type FormEvent } from "react";
 import { ageBands, categories, type AgeBand, type Category } from "@safe-browse/contracts";
 import { api, type AccessRequest, type Child, type HistoryEvent, type PolicyView, type AuthStatus } from "./api";
 
@@ -111,18 +111,31 @@ function ParentAuthScreen({ authStatus, onAuthenticated }: { authStatus: AuthSta
 
   const isSetup = authStatus?.requireSetup ?? false;
 
+  const renderedSiteKey = useRef<string | null>(null);
+
   useEffect(() => {
-    const siteKey = authStatus?.turnstileSiteKey || "1x00000000000000000000AA";
+    // Don't render until we have a real site key from the server
+    const siteKey = authStatus?.turnstileSiteKey;
+    if (!siteKey) return;
+
     const container = document.getElementById("turnstile-container");
-    if (container && window.turnstile && !container.hasChildNodes()) {
-      try {
-        window.turnstile.render("#turnstile-container", {
-          sitekey: siteKey,
-          callback: (token: string) => setTurnstileToken(token),
-        });
-      } catch {
-        // Ignore duplicate render
-      }
+    if (!container || !window.turnstile) return;
+
+    // If we already rendered with this same key, skip
+    if (renderedSiteKey.current === siteKey && container.hasChildNodes()) return;
+
+    // Clear any previously rendered widget (e.g., rendered with a stale/test key)
+    container.innerHTML = "";
+    renderedSiteKey.current = null;
+
+    try {
+      window.turnstile.render("#turnstile-container", {
+        sitekey: siteKey,
+        callback: (token: string) => setTurnstileToken(token),
+      });
+      renderedSiteKey.current = siteKey;
+    } catch {
+      // Ignore duplicate render
     }
   }, [authStatus, mode]);
 
