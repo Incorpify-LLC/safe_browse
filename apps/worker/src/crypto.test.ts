@@ -1,5 +1,14 @@
 import { describe, expect, it } from "vitest";
-import { hashPassword, randomToken, sha256, sixDigitCode, verifyPassword } from "./crypto";
+import {
+  generateEnrollmentCode,
+  hashPassword,
+  isValidEnrollmentCode,
+  normalizeEnrollmentCode,
+  randomToken,
+  sha256,
+  sixDigitCode,
+  verifyPassword,
+} from "./crypto";
 
 describe("credential helpers", () => {
   it("generates URL-safe, non-repeating credentials", () => {
@@ -12,6 +21,17 @@ describe("credential helpers", () => {
   it("hashes deterministically and creates six-digit codes", async () => {
     expect(await sha256("safe-browse")).toBe(await sha256("safe-browse"));
     expect(sixDigitCode()).toMatch(/^\d{6}$/);
+  });
+
+  it("generates high-entropy enrollment codes and normalizes hyphens", () => {
+    const code = generateEnrollmentCode();
+    expect(code).toMatch(/^[A-Z2-9]{4}-[A-Z2-9]{4}-[A-Z2-9]{4}$/);
+    const normalized = normalizeEnrollmentCode(code);
+    expect(normalized).toHaveLength(12);
+    expect(isValidEnrollmentCode(normalized)).toBe(true);
+    expect(normalizeEnrollmentCode(code.toLowerCase().replaceAll("-", " "))).toBe(normalized);
+    expect(isValidEnrollmentCode("123456")).toBe(true); // legacy
+    expect(isValidEnrollmentCode("ABC")).toBe(false);
   });
 
   it("hashes passwords with unique salts and verifies", async () => {

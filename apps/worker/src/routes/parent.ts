@@ -5,7 +5,7 @@ import type { AppBindings, AppVariables } from "../types";
 import { parentAuth } from "../auth";
 import { isResponse, jsonDetail, parseJson } from "../http";
 import { createDefaultCategories, incrementPolicy } from "../policy";
-import { sha256, sixDigitCode } from "../crypto";
+import { generateEnrollmentCode, normalizeEnrollmentCode, sha256 } from "../crypto";
 
 const app = new Hono<{ Bindings: AppBindings; Variables: AppVariables }>();
 app.use("*", parentAuth);
@@ -113,13 +113,15 @@ app.post("/children/:id/reset-preset", async (context) => {
 app.post("/children/:id/enrollment-code", async (context) => {
   const childId = await ownedChild(context, context.req.param("id"));
   if (!childId) return context.json({ error: "not_found" }, 404);
-  const code = sixDigitCode();
-  const codeHash = await sha256(code);
+  // High-entropy display code (hyphenated); hash uses normalized form without separators
+  const code = generateEnrollmentCode();
+  const codeHash = await sha256(normalizeEnrollmentCode(code));
   const now = new Date();
+  const expiresAt = new Date(now.getTime() + 600_000).toISOString();
   await context.env.DB.prepare(
     "INSERT INTO enrollment_codes(id,child_id,code_hash,expires_at,created_at) VALUES(?,?,?,?,?)",
-  ).bind(crypto.randomUUID(), childId, codeHash, new Date(now.getTime() + 600_000).toISOString(), now.toISOString()).run();
-  return context.json({ code, expiresAt: new Date(now.getTime() + 600_000).toISOString() }, 201);
+  ).bind(crypto.randomUUID(), childId, codeHash, expiresAt, now.toISOString()).run();
+  return context.json({ code, expiresAt }, 201);
 });
 
 app.post("/children/:id/schedules", async (context) => {

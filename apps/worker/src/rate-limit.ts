@@ -20,7 +20,8 @@ const DEFAULTS: Record<string, RateLimitPolicy> = {
   login: { action: "login", maxAttempts: 5, windowMs: 15 * 60_000 },
   "totp-recover": { action: "totp-recover", maxAttempts: 5, windowMs: 15 * 60_000 },
   recover: { action: "recover", maxAttempts: 5, windowMs: 15 * 60_000 },
-  enroll: { action: "enroll", maxAttempts: 20, windowMs: 10 * 60_000 },
+  /** Brute-force enroll against high-entropy codes — keep tight */
+  enroll: { action: "enroll", maxAttempts: 10, windowMs: 15 * 60_000 },
   setup: { action: "setup", maxAttempts: 10, windowMs: 60 * 60_000 },
   /** Multi-tenant account creation (per IP). */
   signup: { action: "signup", maxAttempts: 10, windowMs: 60 * 60_000 },

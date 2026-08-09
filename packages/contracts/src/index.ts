@@ -59,8 +59,23 @@ export const eventSchema = z.object({
 });
 export const eventBatchSchema = z.object({ events: z.array(eventSchema).min(1).max(100) });
 
+/**
+ * Device enrollment code from parent console.
+ * Accepts:
+ * - New format: 12 Crockford-like chars, optional hyphens (e.g. AB3K-M9NP-Q2VX)
+ * - Legacy: 6 digits (older agents / codes still in flight)
+ */
 export const enrollmentSchema = z.object({
-  code: z.string().regex(/^\d{6}$/),
+  code: z
+    .string()
+    .trim()
+    .min(6)
+    .max(40)
+    .transform((value) => value.toUpperCase().replace(/[^A-Z0-9]/g, ""))
+    .refine(
+      (normalized) => /^\d{6}$/.test(normalized) || /^[ABCDEFGHJKLMNPQRSTUVWXYZ23456789]{12}$/.test(normalized),
+      "Invalid enrollment code format",
+    ),
   deviceName: z.string().trim().min(1).max(80),
   platform: z.literal("windows"),
   agentVersion: z.string().min(1).max(32),

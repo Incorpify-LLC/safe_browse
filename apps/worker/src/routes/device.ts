@@ -3,7 +3,7 @@ import { accessRequestSchema, enrollmentSchema, eventBatchSchema, heartbeatSchem
 import type { AppBindings, AppVariables } from "../types";
 import { deviceAuth } from "../auth";
 import { isResponse, parseJson } from "../http";
-import { randomToken, sha256 } from "../crypto";
+import { isValidEnrollmentCode, normalizeEnrollmentCode, randomToken, sha256 } from "../crypto";
 import { buildPolicy, latestListVersion } from "../policy";
 import { sendAccessRequestEmail } from "../email";
 import { checkRateLimit, clearRateLimit, clientIp, recordFailure } from "../rate-limit";
@@ -23,7 +23,13 @@ app.post("/enroll", async (context) => {
 
   const body = await parseJson(context, enrollmentSchema);
   if (isResponse(body)) return body;
-  const codeHash = await sha256(body.code);
+  // body.code is already normalized by enrollmentSchema transform; re-normalize for safety
+  const normalized = normalizeEnrollmentCode(body.code);
+  if (!isValidEnrollmentCode(normalized)) {
+    await recordFailure(context.env.DB, "enroll", ip);
+    return context.json({ error: "invalid_or_expired_code" }, 400);
+  }
+  const codeHash = await sha256(normalized);
   const now = new Date().toISOString();
   const enrollment = await context.env.DB.prepare(
     `SELECT e.id,e.child_id AS childId,c.household_id AS householdId

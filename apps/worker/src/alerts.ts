@@ -114,7 +114,13 @@ export async function sendParentSecurityAlert(
     }
 
     // 4. Send via Cloudflare Native Email Binding (Requires custom domain Email Routing)
-    if (env.EMAIL && parentEmail && !parentEmail.endsWith("@family.local")) {
+    // EmailMessage is a Workers runtime global — skip in local Miniflare if missing.
+    if (
+      env.EMAIL &&
+      parentEmail &&
+      !parentEmail.endsWith("@family.local") &&
+      typeof EmailMessage !== "undefined"
+    ) {
       const mime = [
         `From: ${env.EMAIL_FROM || "Safe Browse Alerts <alerts@safebrowse.family>"}`,
         `To: ${parentEmail}`,
@@ -127,7 +133,7 @@ export async function sendParentSecurityAlert(
       const emailMessage = new EmailMessage(
         env.EMAIL_FROM || "alerts@safebrowse.family",
         parentEmail,
-        mime
+        mime,
       );
       await env.EMAIL.send(emailMessage);
       sent = true;

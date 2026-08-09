@@ -32,6 +32,43 @@ export function sixDigitCode(): string {
   }
 }
 
+/**
+ * Crockford-like alphabet (no I, L, O, U, 0, 1) for human-typed enrollment codes.
+ * 32 symbols × 12 chars ≈ 60 bits of entropy.
+ */
+export const ENROLLMENT_ALPHABET = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
+export const ENROLLMENT_CODE_LENGTH = 12;
+
+/** Strip separators and uppercase for hashing / comparison. */
+export function normalizeEnrollmentCode(code: string): string {
+  return code.trim().toUpperCase().replace(/[^A-Z0-9]/g, "");
+}
+
+export function isValidEnrollmentCode(normalized: string): boolean {
+  // New format: 12 chars from enrollment alphabet
+  if (normalized.length === ENROLLMENT_CODE_LENGTH) {
+    for (const ch of normalized) {
+      if (!ENROLLMENT_ALPHABET.includes(ch)) return false;
+    }
+    return true;
+  }
+  // Legacy 6-digit codes (already issued / docs); still accepted on enroll
+  return /^\d{6}$/.test(normalized);
+}
+
+/**
+ * Device enrollment code shown to parents, e.g. `AB3K-M9NP-Q2VX`.
+ * Always hash {@link normalizeEnrollmentCode} of this value (or user input).
+ */
+export function generateEnrollmentCode(): string {
+  const bytes = crypto.getRandomValues(new Uint8Array(ENROLLMENT_CODE_LENGTH));
+  let raw = "";
+  for (let i = 0; i < ENROLLMENT_CODE_LENGTH; i++) {
+    raw += ENROLLMENT_ALPHABET[(bytes[i] ?? 0) % ENROLLMENT_ALPHABET.length];
+  }
+  return `${raw.slice(0, 4)}-${raw.slice(4, 8)}-${raw.slice(8, 12)}`;
+}
+
 /** PBKDF2-HMAC-SHA256 params: balanced for Workers CPU vs offline cracking of short PINs. */
 const PBKDF2_ITERS = 120_000;
 const PBKDF2_SALT_BYTES = 16;

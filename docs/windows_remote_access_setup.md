@@ -227,6 +227,7 @@ Protection policies come from the parent console. After install:
 cd "C:\Program Files\Safe Browse"
 
 # Replace CODE with the enrollment code from the dashboard
+# (format like AB3K-M9NP-Q2VX — hyphens optional)
 # Replace API with your device API base (same host as parent deploy)
 .\SafeBrowse.Enroll.exe "https://YOUR-WORKER.workers.dev/api/v1/device/" "CODE"
 
