@@ -14,6 +14,14 @@ const app = new Hono<{ Bindings: AppBindings; Variables: AppVariables }>();
 const MIN_PASSWORD = 4;
 const MAX_PASSWORD = 100;
 
+const signupSchema = z.object({
+  email: z.string().email("A valid email is required"),
+  password: z.string().min(MIN_PASSWORD, `Password must be at least ${MIN_PASSWORD} characters`).max(MAX_PASSWORD),
+  householdName: z.string().min(1).max(80).optional(),
+  turnstileToken: z.string().optional(),
+});
+
+/** @deprecated Prefer /signup. Kept for self-host single-family installs. */
 const setupSchema = z.object({
   password: z.string().min(MIN_PASSWORD, `Password must be at least ${MIN_PASSWORD} characters`).max(MAX_PASSWORD),
   email: z.string().email().optional(),
@@ -21,8 +29,16 @@ const setupSchema = z.object({
 });
 
 const loginSchema = z.object({
+  email: z.string().email("Email is required"),
   password: z.string().min(1, "Password is required"),
   turnstileToken: z.string().optional(),
+});
+
+/** Legacy password-only login (single-tenant / self-host). Prefer email+password. */
+const legacyLoginSchema = z.object({
+  password: z.string().min(1, "Password is required"),
+  turnstileToken: z.string().optional(),
+  email: z.string().email().optional(),
 });
 
 const recoverSchema = z.object({
@@ -37,6 +53,7 @@ const totpConfirmSchema = z.object({
 });
 
 const totpRecoverSchema = z.object({
+  email: z.string().email("Email is required"),
   totpCode: z.string().length(6, "6-digit authenticator code required"),
   newPassword: z.string().min(MIN_PASSWORD, `Password must be at least ${MIN_PASSWORD} characters`).max(MAX_PASSWORD),
   turnstileToken: z.string().optional(),
@@ -94,15 +111,54 @@ async function requireSession(
   return parent;
 }
 
-/** Single-household: load the parent row that has a password (usually one). */
-async function findParentByPassword(
+type ParentAuthRow = {
+  id: string;
+  householdId: string;
+  email: string;
+  password_hash: string;
+  totp_secret: string | null;
+  needsRehash: boolean;
+};
+
+/** Multi-tenant: look up parent by email, then verify password. */
+async function findParentByEmailPassword(
+  db: D1Database,
+  email: string,
+  password: string,
+): Promise<ParentAuthRow | null> {
+  const row = await db
+    .prepare(
+      `SELECT id, household_id AS householdId, email, password_hash, totp_secret
+       FROM parents WHERE email = ? COLLATE NOCASE`,
+    )
+    .bind(email.toLowerCase())
+    .first<{ id: string; householdId: string; email: string; password_hash: string | null; totp_secret: string | null }>();
+
+  if (!row?.password_hash) return null;
+  const result = await verifyPassword(password, row.password_hash);
+  if (!result.ok) return null;
+  return {
+    id: row.id,
+    householdId: row.householdId,
+    email: row.email,
+    password_hash: row.password_hash,
+    totp_secret: row.totp_secret,
+    needsRehash: result.needsRehash,
+  };
+}
+
+/**
+ * Legacy single-tenant: scan parents with passwords (capped).
+ * Used only when login body has no email (old dashboard / self-host).
+ */
+async function findParentByPasswordOnly(
   db: D1Database,
   password: string,
-): Promise<{ id: string; householdId: string; email: string; password_hash: string; totp_secret: string | null; needsRehash: boolean } | null> {
+): Promise<ParentAuthRow | null> {
   const rows = await db
     .prepare(
       `SELECT id, household_id AS householdId, email, password_hash, totp_secret
-       FROM parents WHERE password_hash IS NOT NULL LIMIT 20`,
+       FROM parents WHERE password_hash IS NOT NULL LIMIT 50`,
     )
     .all<{ id: string; householdId: string; email: string; password_hash: string; totp_secret: string | null }>();
 
@@ -122,43 +178,166 @@ async function issueSession(db: D1Database, parentId: string): Promise<string> {
   return sessionToken;
 }
 
-// ── Status ────────────────────────────────────────────────────────────────────
+/** Create household + parent with password, recovery key, and session. */
+async function provisionParentAccount(
+  db: D1Database,
+  opts: {
+    email: string;
+    password: string;
+    householdName?: string;
+  },
+): Promise<{ parentId: string; email: string; sessionToken: string; recoveryKey: string }> {
+  const email = opts.email.toLowerCase();
+  const existing = await db
+    .prepare(`SELECT id, password_hash FROM parents WHERE email = ? COLLATE NOCASE`)
+    .bind(email)
+    .first<{ id: string; password_hash: string | null }>();
+
+  if (existing?.password_hash) {
+    const err = new Error("email_taken");
+    throw err;
+  }
+
+  const passwordHash = await hashPassword(opts.password);
+  const rawKey = generateRecoveryKey();
+  const recoveryHash = await sha256(`sb_rec_${normalizeKey(rawKey)}`);
+  const sessionToken = crypto.randomUUID() + "-" + crypto.randomUUID();
+  const tokenHash = await sha256(sessionToken);
+  const now = new Date().toISOString();
+
+  let parentId: string;
+
+  if (existing) {
+    // Row exists without password (e.g. CF Access auto-provision) — attach credentials.
+    parentId = existing.id;
+    await db
+      .prepare(
+        `UPDATE parents SET password_hash = ?, recovery_key_hash = ?, session_token = ?, totp_secret = NULL WHERE id = ?`,
+      )
+      .bind(passwordHash, recoveryHash, tokenHash, parentId)
+      .run();
+  } else {
+    const householdId = crypto.randomUUID();
+    parentId = crypto.randomUUID();
+    const householdName = (opts.householdName?.trim() || `${email.split("@")[0]}'s household`).slice(0, 80);
+    await db.batch([
+      db
+        .prepare("INSERT INTO households(id,name,timezone,created_at) VALUES(?,?,?,?)")
+        .bind(householdId, householdName, "UTC", now),
+      db
+        .prepare(
+          `INSERT INTO parents(id,household_id,email,created_at,password_hash,recovery_key_hash,session_token,totp_secret)
+           VALUES(?,?,?,?,?,?,?,NULL)`,
+        )
+        .bind(parentId, householdId, email, now, passwordHash, recoveryHash, tokenHash),
+    ]);
+  }
+
+  return { parentId, email, sessionToken, recoveryKey: rawKey };
+}
+
+// ── Status (multi-tenant aware) ───────────────────────────────────────────────
 app.get("/status", async (context) => {
-  const row = await context.env.DB.prepare(
-    `SELECT COUNT(*) AS count,
-      SUM(CASE WHEN password_hash IS NOT NULL THEN 1 ELSE 0 END) AS withPassword,
-      SUM(CASE WHEN totp_secret IS NOT NULL THEN 1 ELSE 0 END) AS withTotp
-     FROM parents`,
-  ).first<{ count: number; withPassword: number; withTotp: number }>();
+  let session: {
+    email: string;
+    hasPassword: boolean;
+    hasTotp: boolean;
+  } | null = null;
 
-  const hasPassword = (row?.withPassword ?? 0) > 0;
-  const hasTotp = (row?.withTotp ?? 0) > 0;
-  const parentCount = row?.count ?? 0;
-
-  // If session present, report whether this parent still needs TOTP enrollment
-  let sessionNeedsTotp = false;
   const authHeader = context.req.header("Authorization");
   if (authHeader?.startsWith("Bearer ")) {
     const tokenHash = await sha256(authHeader.slice(7).trim());
     const me = await context.env.DB.prepare(
-      `SELECT password_hash, totp_secret FROM parents WHERE session_token = ?`,
-    ).bind(tokenHash).first<{ password_hash: string | null; totp_secret: string | null }>();
-    if (me?.password_hash && !me.totp_secret) sessionNeedsTotp = true;
+      `SELECT email, password_hash, totp_secret FROM parents WHERE session_token = ?`,
+    )
+      .bind(tokenHash)
+      .first<{ email: string; password_hash: string | null; totp_secret: string | null }>();
+    if (me) {
+      session = {
+        email: me.email,
+        hasPassword: Boolean(me.password_hash),
+        hasTotp: Boolean(me.totp_secret),
+      };
+    }
   }
 
+  // Global counts kept for ops/debug only — not used to lock signup.
+  const row = await context.env.DB.prepare(
+    `SELECT COUNT(*) AS count,
+      SUM(CASE WHEN password_hash IS NOT NULL THEN 1 ELSE 0 END) AS withPassword
+     FROM parents`,
+  ).first<{ count: number; withPassword: number }>();
+
+  const sessionNeedsTotp = Boolean(session?.hasPassword && !session.hasTotp);
+
   return context.json({
-    hasPassword,
-    hasTotpBackup: hasTotp,
-    parentCount,
-    requireSetup: !hasPassword,
+    /** SaaS / multi-household mode: always allow new signups. */
+    multiTenant: true,
+    signupEnabled: true,
     /**
-     * True when the current session (if any) still needs authenticator setup,
-     * or when household has a password but no TOTP yet (login will force setup).
-     * Dashboard only blocks on this when a session token is present.
+     * No global first-setup gate. Clients should show Sign up + Log in.
+     * Legacy dashboards that only check requireSetup will open login (not setup).
      */
-    requireTotp: sessionNeedsTotp || (hasPassword && !hasTotp),
+    requireSetup: false,
+    /** Session-scoped: this parent still needs authenticator link. */
+    requireTotp: sessionNeedsTotp,
+    hasSession: Boolean(session),
+    email: session?.email ?? null,
+    hasPassword: session?.hasPassword ?? false,
+    hasTotpBackup: session?.hasTotp ?? false,
+    parentCount: row?.count ?? 0,
+    configuredAccounts: row?.withPassword ?? 0,
     turnstileSiteKey: context.env.TURNSTILE_SITE_KEY || "1x00000000000000000000AA",
   });
+});
+
+// ── Sign up (multi-tenant: new household + parent) ─────────────────────────────
+app.post("/signup", async (context) => {
+  const body = await parseJson(context, signupSchema);
+  if (isResponse(body)) return body;
+
+  const ip = clientIp(context.req.raw.headers);
+  const userAgent = context.req.header("User-Agent") || "Unknown";
+  const email = body.email.toLowerCase();
+
+  const limited = await checkRateLimit(context.env.DB, "signup", ip);
+  if (!limited.allowed) return rateLimitedResponse(limited.retryAfterSec);
+
+  // Also rate-limit per email to slow targeted abuse
+  const emailLimited = await checkRateLimit(context.env.DB, "signup", `email:${email}`);
+  if (!emailLimited.allowed) return rateLimitedResponse(emailLimited.retryAfterSec);
+
+  const turnstileOk = await verifyTurnstileToken(context.env.TURNSTILE_SECRET_KEY, body.turnstileToken, ip);
+  if (!turnstileOk) {
+    return context.json({ error: "turnstile_failed", message: "CAPTCHA bot verification failed. Please try again." }, 400);
+  }
+
+  try {
+    const account = await provisionParentAccount(context.env.DB, {
+      email,
+      password: body.password,
+      ...(body.householdName ? { householdName: body.householdName } : {}),
+    });
+    await clearRateLimit(context.env.DB, "signup", ip);
+    await clearRateLimit(context.env.DB, "signup", `email:${email}`);
+    void sendParentSecurityAlert(context.env, account.email, "password.created", { ipAddress: ip, userAgent });
+
+    return context.json({
+      token: account.sessionToken,
+      email: account.email,
+      recoveryKey: account.recoveryKey,
+      requireTotp: true,
+    });
+  } catch (e) {
+    if (e instanceof Error && e.message === "email_taken") {
+      await recordFailure(context.env.DB, "signup", ip);
+      return context.json({
+        error: "email_taken",
+        message: "An account with this email already exists. Log in instead.",
+      }, 409);
+    }
+    throw e;
+  }
 });
 
 // ── TOTP Setup (session required; allowed before TOTP is linked) ──────────────
@@ -166,7 +345,6 @@ app.get("/totp/setup", async (context) => {
   const parent = await requireSession(context);
   if (parent instanceof Response) return parent;
 
-  // If already linked, refuse to mint a new secret without operator wipe
   if (parent.totp_secret) {
     return context.json({
       error: "totp_already_configured",
@@ -205,13 +383,14 @@ app.post("/totp/confirm", async (context) => {
   return context.json({ ok: true });
 });
 
-// ── TOTP Recover: primary email-less forgot-PIN path ──────────────────────────
+// ── TOTP Recover: forgot PIN (email + authenticator) ──────────────────────────
 app.post("/totp/recover", async (context) => {
   const body = await parseJson(context, totpRecoverSchema);
   if (isResponse(body)) return body;
 
   const ip = clientIp(context.req.raw.headers);
   const userAgent = context.req.header("User-Agent") || "Unknown";
+  const email = body.email.toLowerCase();
 
   const limited = await checkRateLimit(context.env.DB, "totp-recover", ip);
   if (!limited.allowed) return rateLimitedResponse(limited.retryAfterSec);
@@ -222,14 +401,19 @@ app.post("/totp/recover", async (context) => {
   }
 
   const parent = await context.env.DB.prepare(
-    `SELECT id, email, totp_secret FROM parents WHERE totp_secret IS NOT NULL LIMIT 1`,
-  ).first<{ id: string; email: string; totp_secret: string }>();
+    `SELECT id, email, totp_secret FROM parents WHERE email = ? COLLATE NOCASE`,
+  )
+    .bind(email)
+    .first<{ id: string; email: string; totp_secret: string | null }>();
 
-  if (!parent) {
+  // Uniform error to avoid account enumeration where possible
+  if (!parent?.totp_secret) {
+    const after = await recordFailure(context.env.DB, "totp-recover", ip);
+    if (!after.allowed) return rateLimitedResponse(after.retryAfterSec);
     return context.json({
-      error: "totp_not_configured",
-      message: "No authenticator app is linked. If you lost access entirely, re-run deploy with --reset-parent-auth.",
-    }, 404);
+      error: "invalid_totp",
+      message: "Incorrect email or authenticator code.",
+    }, 401);
   }
 
   const valid = await verifyTotp(parent.totp_secret, body.totpCode);
@@ -238,7 +422,7 @@ app.post("/totp/recover", async (context) => {
     if (!after.allowed) return rateLimitedResponse(after.retryAfterSec);
     return context.json({
       error: "invalid_totp",
-      message: "Incorrect authenticator code. Codes refresh every 30 seconds.",
+      message: "Incorrect email or authenticator code. Codes refresh every 30 seconds.",
     }, 401);
   }
 
@@ -257,7 +441,7 @@ app.post("/totp/recover", async (context) => {
   return context.json({ token: sessionToken, email: parent.email });
 });
 
-// ── First-time setup (once only) ──────────────────────────────────────────────
+// ── Legacy setup (self-host single-family) → delegates to signup semantics ────
 app.post("/setup", async (context) => {
   const body = await parseJson(context, setupSchema);
   if (isResponse(body)) return body;
@@ -265,14 +449,48 @@ app.post("/setup", async (context) => {
   const ip = clientIp(context.req.raw.headers);
   const userAgent = context.req.header("User-Agent") || "Unknown";
 
+  // If email provided, behave as multi-tenant signup
+  if (body.email) {
+    const limited = await checkRateLimit(context.env.DB, "signup", ip);
+    if (!limited.allowed) return rateLimitedResponse(limited.retryAfterSec);
+
+    const turnstileOk = await verifyTurnstileToken(context.env.TURNSTILE_SECRET_KEY, body.turnstileToken, ip);
+    if (!turnstileOk) {
+      return context.json({ error: "turnstile_failed", message: "CAPTCHA bot verification failed. Please try again." }, 400);
+    }
+
+    try {
+      const account = await provisionParentAccount(context.env.DB, {
+        email: body.email.toLowerCase(),
+        password: body.password,
+      });
+      await clearRateLimit(context.env.DB, "signup", ip);
+      void sendParentSecurityAlert(context.env, account.email, "password.created", { ipAddress: ip, userAgent });
+      return context.json({
+        token: account.sessionToken,
+        email: account.email,
+        recoveryKey: account.recoveryKey,
+        requireTotp: true,
+      });
+    } catch (e) {
+      if (e instanceof Error && e.message === "email_taken") {
+        return context.json({
+          error: "email_taken",
+          message: "An account with this email already exists. Log in instead.",
+        }, 409);
+      }
+      throw e;
+    }
+  }
+
+  // No email: legacy single-tenant path (parent@family.local) only if no accounts yet
   const already = await context.env.DB.prepare(
     `SELECT COUNT(*) AS count FROM parents WHERE password_hash IS NOT NULL`,
   ).first<{ count: number }>();
   if ((already?.count ?? 0) > 0) {
     return context.json({
       error: "already_configured",
-      message:
-        "Parent password is already set. Sign in, use authenticator recovery, or run: bash tools/deploy.sh --reset-parent-auth",
+      message: "Accounts already exist. Use Sign up with your email, or Log in.",
     }, 409);
   }
 
@@ -284,7 +502,7 @@ app.post("/setup", async (context) => {
     return context.json({ error: "turnstile_failed", message: "CAPTCHA bot verification failed. Please try again." }, 400);
   }
 
-  const email = (body.email || "parent@family.local").toLowerCase();
+  const email = "parent@family.local";
   const parent = await ensureParent(context.env.DB, email);
   const passwordHash = await hashPassword(body.password);
 
@@ -308,10 +526,20 @@ app.post("/setup", async (context) => {
   });
 });
 
-// ── Login ─────────────────────────────────────────────────────────────────────
+// ── Login (email + password preferred) ────────────────────────────────────────
 app.post("/login", async (context) => {
-  const body = await parseJson(context, loginSchema);
-  if (isResponse(body)) return body;
+  // Accept both multi-tenant (email+password) and legacy (password only)
+  const raw = await context.req.json().catch(() => null);
+  if (!raw || typeof raw !== "object") {
+    return context.json({ error: "invalid_json" }, 400);
+  }
+
+  const hasEmail = typeof (raw as { email?: unknown }).email === "string" && (raw as { email: string }).email.length > 0;
+  const parsed = hasEmail ? loginSchema.safeParse(raw) : legacyLoginSchema.safeParse(raw);
+  if (!parsed.success) {
+    return context.json({ error: "validation_error", issues: parsed.error.issues }, 400);
+  }
+  const body = parsed.data;
 
   const ip = clientIp(context.req.raw.headers);
   const userAgent = context.req.header("User-Agent") || "Unknown";
@@ -324,22 +552,29 @@ app.post("/login", async (context) => {
     return context.json({ error: "turnstile_failed", message: "CAPTCHA bot verification failed. Please try again." }, 400);
   }
 
-  const parent = await findParentByPassword(context.env.DB, body.password);
+  let parent: ParentAuthRow | null = null;
+  if ("email" in body && body.email) {
+    parent = await findParentByEmailPassword(context.env.DB, body.email, body.password);
+  } else {
+    parent = await findParentByPasswordOnly(context.env.DB, body.password);
+  }
+
   if (!parent) {
     const after = await recordFailure(context.env.DB, "login", ip);
     if (!after.allowed) {
-      const anyParent = await context.env.DB.prepare(
-        `SELECT email FROM parents WHERE email NOT LIKE '%@family.local' LIMIT 1`,
-      ).first<{ email: string }>();
-      if (anyParent?.email) {
-        void sendParentSecurityAlert(context.env, anyParent.email, "login.brute_force_detected", {
+      // Alert the targeted email if known; otherwise skip global scan spam
+      if ("email" in body && body.email) {
+        void sendParentSecurityAlert(context.env, body.email.toLowerCase(), "login.brute_force_detected", {
           ipAddress: ip,
           userAgent,
         });
       }
       return rateLimitedResponse(after.retryAfterSec);
     }
-    return context.json({ error: "invalid_password", message: "Incorrect parent password" }, 401);
+    return context.json({
+      error: "invalid_credentials",
+      message: hasEmail ? "Incorrect email or password" : "Incorrect parent password",
+    }, 401);
   }
 
   await clearRateLimit(context.env.DB, "login", ip);
@@ -358,7 +593,7 @@ app.post("/login", async (context) => {
   });
 });
 
-// ── Paper recovery key (secondary) ────────────────────────────────────────────
+// ── Paper recovery key (secondary; key is globally unique) ────────────────────
 app.post("/recover", async (context) => {
   const body = await parseJson(context, recoverSchema);
   if (isResponse(body)) return body;

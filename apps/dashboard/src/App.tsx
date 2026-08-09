@@ -28,6 +28,10 @@ export function App() {
   const checkAuth = useCallback(async () => {
     try {
       const status = await api.authStatus();
+      // Drop stale tokens (server has no session for this Bearer)
+      if (localStorage.getItem("sb_parent_token") && status.hasSession === false) {
+        localStorage.removeItem("sb_parent_token");
+      }
       setAuthStatus(status);
       return status;
     } catch {
@@ -45,7 +49,12 @@ export function App() {
       setAuthenticated(true);
     } catch (cause) {
       const msg = cause instanceof Error ? cause.message : "Unable to load Safe Browse";
-      if (msg.includes("401") || msg.includes("unauthorized") || msg.includes("Parent password")) {
+      if (
+        msg.includes("401") ||
+        msg.includes("unauthorized") ||
+        msg.includes("Parent password") ||
+        msg.includes("totp_required")
+      ) {
         setAuthenticated(false);
       } else {
         setError(msg);
@@ -55,7 +64,9 @@ export function App() {
 
   useEffect(() => {
     void checkAuth().then((status) => {
-      if (status && !status.requireSetup && !status.requireTotp) {
+      const token = localStorage.getItem("sb_parent_token");
+      // Load console only when we have a session and TOTP is complete
+      if (token && status && !status.requireTotp && (status.hasSession !== false)) {
         void refresh();
       }
     });
@@ -169,15 +180,18 @@ function MandatoryTotpGate({ onComplete, onLogout }: { onComplete(): Promise<voi
   );
 }
 
+type AuthMode = "login" | "signup" | "recover" | "totp-recover";
+
 function ParentAuthScreen({ authStatus, onAuthenticated }: { authStatus: AuthStatus | null; onAuthenticated(): Promise<void> }) {
+  const multiTenant = authStatus?.multiTenant !== false && authStatus?.signupEnabled !== false;
   const [password, setPassword] = useState("");
   const [email, setEmail] = useState("");
+  const [householdName, setHouseholdName] = useState("");
   const [recoveryKey, setRecoveryKey] = useState("");
   const [newPassword, setNewPassword] = useState("");
   const [turnstileToken, setTurnstileToken] = useState<string>("");
   const [generatedKey, setGeneratedKey] = useState<string | null>(null);
-  const [mode, setMode] = useState<"auth" | "recover" | "totp-recover">("auth");
-  // TOTP setup state
+  const [mode, setMode] = useState<AuthMode>("login");
   const [totpSetup, setTotpSetup] = useState<{ secret: string; otpauthUri: string } | null>(null);
   const [totpCode, setTotpCode] = useState("");
   const [totpConfirmed, setTotpConfirmed] = useState(false);
@@ -186,25 +200,16 @@ function ParentAuthScreen({ authStatus, onAuthenticated }: { authStatus: AuthSta
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
 
-  const isSetup = authStatus?.requireSetup ?? false;
-
   const renderedSiteKey = useRef<string | null>(null);
 
   useEffect(() => {
-    // Don't render until we have a real site key from the server
     const siteKey = authStatus?.turnstileSiteKey;
     if (!siteKey) return;
-
     const container = document.getElementById("turnstile-container");
     if (!container || !window.turnstile) return;
-
-    // If we already rendered with this same key, skip
     if (renderedSiteKey.current === siteKey && container.hasChildNodes()) return;
-
-    // Clear any previously rendered widget (e.g., rendered with a stale/test key)
     container.innerHTML = "";
     renderedSiteKey.current = null;
-
     try {
       window.turnstile.render("#turnstile-container", {
         sitekey: siteKey,
@@ -212,7 +217,7 @@ function ParentAuthScreen({ authStatus, onAuthenticated }: { authStatus: AuthSta
       });
       renderedSiteKey.current = siteKey;
     } catch {
-      // Ignore duplicate render
+      /* ignore */
     }
   }, [authStatus, mode]);
 
@@ -227,17 +232,23 @@ function ParentAuthScreen({ authStatus, onAuthenticated }: { authStatus: AuthSta
         return;
       }
       if (mode === "totp-recover") {
-        await api.totpRecover(totpCode, totpNewPassword, turnstileToken);
+        await api.totpRecover(email.trim(), totpCode, totpNewPassword, turnstileToken);
         await onAuthenticated();
         return;
       }
-      if (isSetup) {
-        const res = await api.setupPassword(password, email || undefined, turnstileToken);
+      if (mode === "signup") {
+        const res = await api.signup(
+          email.trim(),
+          password,
+          turnstileToken,
+          householdName.trim() || undefined,
+        );
         setGeneratedKey(res.recoveryKey);
-      } else {
-        await api.login(password, turnstileToken);
-        await onAuthenticated();
+        return;
       }
+      // login
+      await api.login(email.trim(), password, turnstileToken);
+      await onAuthenticated();
     } catch (err) {
       setError(err instanceof Error ? err.message : "Authentication failed");
     } finally {
@@ -253,7 +264,7 @@ function ParentAuthScreen({ authStatus, onAuthenticated }: { authStatus: AuthSta
     }
   }
 
-  // After setup / paper-key recover: mandatory TOTP
+  // After signup / paper-key recover: show recovery key then mandatory TOTP
   if (generatedKey) {
     if (totpConfirmed) {
       return (
@@ -263,11 +274,19 @@ function ParentAuthScreen({ authStatus, onAuthenticated }: { authStatus: AuthSta
               <span className="brand-mark">✅</span>
               <h2>You&apos;re protected</h2>
               <p>
-                Daily access uses your PIN. If you forget it, open your authenticator app.
-                If you lose your phone, re-run <code>deploy.sh --reset-parent-auth</code> on a computer that has your Cloudflare token.
+                Daily access uses your email and PIN. If you forget your PIN, open your authenticator app
+                and use <strong>Forgot PIN</strong> on the login screen.
               </p>
             </div>
-            <button className="primary full" type="button" onClick={async () => { setGeneratedKey(null); setTotpConfirmed(false); await onAuthenticated(); }}>
+            <button
+              className="primary full"
+              type="button"
+              onClick={async () => {
+                setGeneratedKey(null);
+                setTotpConfirmed(false);
+                await onAuthenticated();
+              }}
+            >
               Enter Dashboard
             </button>
           </div>
@@ -298,6 +317,7 @@ function ParentAuthScreen({ authStatus, onAuthenticated }: { authStatus: AuthSta
               Your <strong>primary</strong> way to reset a forgotten PIN is your authenticator app.
             </p>
           </div>
+          {error && <div className="error">{error}</div>}
           <div className="key-display">
             <code>{generatedKey}</code>
             <button type="button" className="secondary" onClick={handleCopyKey}>
@@ -312,6 +332,7 @@ function ParentAuthScreen({ authStatus, onAuthenticated }: { authStatus: AuthSta
             type="button"
             onClick={async () => {
               try {
+                setError(null);
                 setTotpSetup(await api.totpSetup());
               } catch (err) {
                 setError(err instanceof Error ? err.message : "Could not start authenticator setup");
@@ -325,6 +346,19 @@ function ParentAuthScreen({ authStatus, onAuthenticated }: { authStatus: AuthSta
     );
   }
 
+  const titles: Record<AuthMode, string> = {
+    login: "Log in",
+    signup: "Create your account",
+    recover: "Paper recovery key",
+    "totp-recover": "Forgot PIN — Authenticator",
+  };
+  const subtitles: Record<AuthMode, string> = {
+    login: "Enter your email and PIN to open child profiles and browsing history.",
+    signup: "Sign up for a free family account. Next you will link an authenticator app (required).",
+    recover: "Secondary option: enter the paper recovery key shown once at sign-up.",
+    "totp-recover": "Enter your email, the 6-digit code from your authenticator app, then choose a new PIN.",
+  };
+
   return (
     <div className="auth-shell">
       <form className="auth-card" onSubmit={handleSubmit}>
@@ -333,27 +367,32 @@ function ParentAuthScreen({ authStatus, onAuthenticated }: { authStatus: AuthSta
           <h2>Safe Browse</h2>
           <p>Parent Control Console</p>
         </div>
-        
+
+        {multiTenant && (mode === "login" || mode === "signup") && (
+          <div className="auth-tabs" role="tablist">
+            <button
+              type="button"
+              role="tab"
+              className={mode === "login" ? "auth-tab active" : "auth-tab"}
+              onClick={() => { setError(null); setMode("login"); }}
+            >
+              Log in
+            </button>
+            <button
+              type="button"
+              role="tab"
+              className={mode === "signup" ? "auth-tab active" : "auth-tab"}
+              onClick={() => { setError(null); setMode("signup"); }}
+            >
+              Sign up
+            </button>
+          </div>
+        )}
+
         {error && <div className="error">{error}</div>}
 
-        <h3>
-          {mode === "totp-recover"
-            ? "Forgot PIN — Authenticator"
-            : mode === "recover"
-            ? "Paper recovery key"
-            : isSetup
-            ? "Create Master PIN"
-            : "Parent Authentication"}
-        </h3>
-        <p className="subtext">
-          {mode === "totp-recover"
-            ? "Enter the 6-digit code from your authenticator app, then choose a new PIN."
-            : mode === "recover"
-            ? "Secondary option: enter the paper recovery key shown once at setup."
-            : isSetup
-            ? "Choose a PIN or password for this household. Next you will link an authenticator app (required)."
-            : "Enter your parent PIN to open child profiles and browsing history."}
-        </p>
+        <h3>{titles[mode]}</h3>
+        <p className="subtext">{subtitles[mode]}</p>
 
         {mode === "recover" ? (
           <>
@@ -382,6 +421,17 @@ function ParentAuthScreen({ authStatus, onAuthenticated }: { authStatus: AuthSta
         ) : mode === "totp-recover" ? (
           <>
             <label>
+              Email
+              <input
+                type="email"
+                placeholder="you@example.com"
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
+                required
+                autoFocus
+              />
+            </label>
+            <label>
               6-Digit Authenticator Code
               <input
                 type="text"
@@ -391,7 +441,6 @@ function ParentAuthScreen({ authStatus, onAuthenticated }: { authStatus: AuthSta
                 value={totpCode}
                 onChange={(e) => setTotpCode(e.target.value.replace(/\D/g, "").slice(0, 6))}
                 required
-                autoFocus
               />
             </label>
             <label>
@@ -407,27 +456,38 @@ function ParentAuthScreen({ authStatus, onAuthenticated }: { authStatus: AuthSta
           </>
         ) : (
           <>
-            {isSetup && (
+            <label>
+              Email
+              <input
+                type="email"
+                placeholder="you@example.com"
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
+                required
+                autoFocus
+              />
+            </label>
+            {mode === "signup" && (
               <label>
-                Parent Email (Optional)
+                Household name <span style={{ opacity: 0.6 }}>(optional)</span>
                 <input
-                  type="email"
-                  placeholder="parent@family.com"
-                  value={email}
-                  onChange={(e) => setEmail(e.target.value)}
+                  type="text"
+                  placeholder="The Smith family"
+                  value={householdName}
+                  onChange={(e) => setHouseholdName(e.target.value)}
+                  maxLength={80}
                 />
               </label>
             )}
-
             <label>
-              Master Password / PIN
+              {mode === "signup" ? "Choose a PIN / password" : "PIN / password"}
               <input
                 type="password"
                 placeholder="••••••••"
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
                 required
-                autoFocus
+                minLength={4}
               />
             </label>
           </>
@@ -439,34 +499,29 @@ function ParentAuthScreen({ authStatus, onAuthenticated }: { authStatus: AuthSta
           {busy
             ? "Processing..."
             : mode === "totp-recover" || mode === "recover"
-            ? "Reset PIN & Login"
-            : isSetup
-            ? "Set PIN & Continue"
-            : "Unlock Console"}
+              ? "Reset PIN & Log in"
+              : mode === "signup"
+                ? "Create account"
+                : "Log in"}
         </button>
 
-        {!isSetup && (
-          <div className="auth-footer">
-            {mode === "auth" ? (
-              <>
-                {authStatus?.hasTotpBackup ? (
-                  <button type="button" className="text-button" onClick={() => { setError(null); setMode("totp-recover"); }}>
-                    Forgot PIN? Use authenticator app
-                  </button>
-                ) : (
-                  <p className="subtext">No authenticator linked yet. Complete setup or use operator reset.</p>
-                )}
-                <button type="button" className="text-button" onClick={() => { setError(null); setMode("recover"); }}>
-                  Use paper recovery key instead
-                </button>
-              </>
-            ) : (
-              <button type="button" className="text-button" onClick={() => { setError(null); setMode("auth"); }}>
-                Back to PIN login
+        <div className="auth-footer">
+          {(mode === "login" || mode === "signup") && (
+            <>
+              <button type="button" className="text-button" onClick={() => { setError(null); setMode("totp-recover"); }}>
+                Forgot PIN? Use authenticator app
               </button>
-            )}
-          </div>
-        )}
+              <button type="button" className="text-button" onClick={() => { setError(null); setMode("recover"); }}>
+                Use paper recovery key instead
+              </button>
+            </>
+          )}
+          {(mode === "recover" || mode === "totp-recover") && (
+            <button type="button" className="text-button" onClick={() => { setError(null); setMode("login"); }}>
+              Back to log in
+            </button>
+          )}
+        </div>
       </form>
     </div>
   );
@@ -552,8 +607,7 @@ function TotpSetupWizard({
         </form>
         {required && (
           <p className="subtext" style={{ marginTop: 12 }}>
-            You cannot skip this step. If you lose this phone later, run{" "}
-            <code>bash tools/deploy.sh --reset-parent-auth</code> from a machine with your Cloudflare API token.
+            You cannot skip this step. Keep this phone (or export the authenticator) — it is how you reset a forgotten PIN.
           </p>
         )}
       </div>

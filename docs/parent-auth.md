@@ -1,95 +1,104 @@
-# Parent console security — three-key ladder
+# Parent console security — multi-tenant SaaS + self-host
 
-Safe Browse is built for a **single household** on **your** Cloudflare account.
-There is **no email login** and no SaaS account signup. Access uses three independent keys.
+Safe Browse supports **many households on one Incorpify-hosted Worker** (SaaS default).
+Each parent signs up with **email + PIN**, then links a **TOTP authenticator**.
 
-## The three keys
+Self-host (single family on your own CF account) still works via legacy `/setup` without email.
 
-| Key | What it is | Who holds it | Used for |
-| :--- | :--- | :--- | :--- |
-| **A — PIN** | Master PIN / password you choose at first setup | Parent | Daily unlock of the console |
-| **B — Authenticator (TOTP)** | App on your phone (Google Authenticator, Authy, 1Password, Bitwarden, …) | Parent | **Primary** “forgot PIN” recovery |
-| **C — Cloudflare operator** | API token / dashboard access that runs `deploy.sh` | You as deployer | **Nuclear** reset if you lost the phone |
+---
+
+## SaaS model (default)
+
+| Key | What it is | Used for |
+| :--- | :--- | :--- |
+| **Email** | Unique parent login id | Sign up / log in / TOTP recover scope |
+| **PIN** | Master password (min 4 chars) | Daily unlock |
+| **Authenticator (TOTP)** | App on your phone | **Required** after signup; primary forgot-PIN path |
+| **Paper recovery key** | Shown once at signup | Secondary forgot-PIN |
+| **Incorpify operator** | Cloudflare account / deploy tooling | Support reset of a locked account (not a public API) |
 
 ```
-Daily use ──────────────►  Key A (PIN)
-Forgot PIN ─────────────►  Key B (TOTP code → set new PIN)
-Lost phone + forgot PIN ►  Key C (deploy.sh --reset-parent-auth → setup again)
+Sign up (email + PIN) ──► Link TOTP ──► Use dashboard
+Daily use ──────────────► Email + PIN
+Forgot PIN ─────────────► Email + TOTP code → new PIN
+Paper key still works ──► Recovery key → new PIN (+ new paper key)
 ```
 
-## First-time setup (once)
+### API (multi-tenant)
 
-1. Open the dashboard URL after deploy.
-2. Create a master PIN (or longer password).
-3. Optionally write down the **paper recovery key** (secondary backup).
-4. **Required:** scan the QR code and confirm a 6-digit code from your authenticator app.
-5. Setup is then locked. Public `/setup` will not overwrite your account.
+| Endpoint | Purpose |
+| :--- | :--- |
+| `POST /api/v1/auth/signup` | Create **new household** + parent (`email`, `password`, optional `householdName`, Turnstile) |
+| `POST /api/v1/auth/login` | `email` + `password` (+ Turnstile) |
+| `GET /api/v1/auth/status` | `multiTenant: true`, `signupEnabled: true`, `requireSetup: false`; session fields if Bearer present |
+| `POST /api/v1/auth/totp/recover` | `email` + `totpCode` + `newPassword` |
+| `POST /api/v1/auth/recover` | Paper recovery key (unique per parent) |
+| `POST /api/v1/auth/setup` | **Legacy**: with `email` → same as signup; without email → single-tenant `parent@family.local` only if no accounts exist |
 
-You cannot skip the authenticator. Without it, there is no email-less recovery for a forgotten PIN.
+Two different emails ⇒ two isolated households (children/devices never cross).
 
-## Forgot PIN (no email)
+---
 
-1. On the login screen choose **Forgot PIN? Use authenticator app**.
-2. Enter the current 6-digit code and a new PIN.
-3. You are signed in again.
+## First-time (SaaS)
 
-Failed attempts are rate-limited (D1-backed). Too many wrong codes locks that path for ~15 minutes.
+1. Open `https://safebrowse.incorpify.in` (or your deploy URL).
+2. **Sign up** with email + PIN.
+3. Save the **paper recovery key** (optional but recommended).
+4. **Link authenticator** (required before console APIs).
+5. Add children, enroll devices.
+
+You cannot skip the authenticator for password-based parents.
+
+---
+
+## Forgot PIN
+
+1. Choose **Forgot PIN? Use authenticator**.
+2. Enter **email**, current 6-digit code, and new PIN.
+3. Signed in again.
+
+Failed attempts are rate-limited (D1). Wrong TOTP does not reveal whether the email exists (uniform error).
+
+---
 
 ## Paper recovery key (secondary)
 
-Shown once at setup. Use **Use paper recovery key instead** if you still have the key but prefer not to use TOTP.
-Still rate-limited. Prefer TOTP as the normal path.
+Shown once at signup/setup. Still rate-limited. Prefer TOTP for normal recovery.
 
-## Lost authenticator phone
+---
 
-There is **no public internet path** to wipe TOTP (that would let anyone take over the console).
+## Self-host (single family)
 
-From a machine that has your **Cloudflare API token**:
+If you run `deploy.sh` on your own Cloudflare account:
+
+1. Open the Worker URL.
+2. Call legacy **setup** with PIN only (creates `parent@family.local`), **or** signup with your email.
+3. Link TOTP as above.
+
+Operator nuclear wipe of **all** parent auth on that D1:
 
 ```bash
 export CLOUDFLARE_API_TOKEN="..."
 bash tools/deploy.sh --reset-parent-auth
 ```
 
-Type `RESET` when prompted. This clears:
+On **SaaS**, that tool must not be used as a routine parent recovery path (it would affect every family). Support resets should target **one parent row** (runbook TBD).
 
-- PIN hash  
-- TOTP secret  
-- paper recovery key  
-- active sessions  
-
-It does **not** delete children, devices, policies, or history.
-
-Then open the dashboard and complete first-time setup again (new PIN + new authenticator).
-
-To wipe auth and redeploy the Worker in one go:
-
-```bash
-bash tools/deploy.sh --reset-parent-auth-and-deploy
-```
+---
 
 ## What is intentionally hard
 
 | Attacker | Outcome |
 | :--- | :--- |
-| Internet random / child with only the URL | Cannot open setup again; cannot reset without TOTP or CF token |
-| Guessing PIN online | Rate limited + slow password hash (PBKDF2) |
-| Guessing TOTP codes online | Rate limited + 30s code window |
-| Someone with your unlocked phone | Can reset PIN (intended) |
-| Someone with your Cloudflare token | Can factory-reset parent auth (same as owning the host) |
+| Internet random | Cannot take over without email + PIN or TOTP |
+| Child with only the URL | No access without parent credentials |
+| Guessing PIN online | Rate limited + PBKDF2 |
+| Guessing TOTP online | Rate limited + 30s window |
+| Someone with unlocked parent phone | Can reset PIN (intended) |
 
-## Residual honesty
+---
 
-- VPN / local admin on the **child PC** can still bypass DNS filtering — that is the Windows agent threat model, not the console.
-- Store Cloudflare tokens like house keys; do not commit them to git.
-- Short PINs are convenient; PBKDF2 + rate limits reduce online risk. Prefer a longer passphrase when you can.
+## Related
 
-## Operator SQL (manual)
-
-Equivalent to `--reset-parent-auth`:
-
-```bash
-npx wrangler d1 execute safe-browse --remote \
-  --command "UPDATE parents SET password_hash = NULL, recovery_key_hash = NULL, totp_secret = NULL, session_token = NULL;" \
-  --config apps/worker/wrangler.jsonc
-```
+- Multi-tenant product plan: [saas-multitenant-plan.md](./saas-multitenant-plan.md)
+- Deploy: [deployment.md](./deployment.md)

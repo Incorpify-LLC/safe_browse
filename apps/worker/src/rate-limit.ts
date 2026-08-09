@@ -22,6 +22,8 @@ const DEFAULTS: Record<string, RateLimitPolicy> = {
   recover: { action: "recover", maxAttempts: 5, windowMs: 15 * 60_000 },
   enroll: { action: "enroll", maxAttempts: 20, windowMs: 10 * 60_000 },
   setup: { action: "setup", maxAttempts: 10, windowMs: 60 * 60_000 },
+  /** Multi-tenant account creation (per IP). */
+  signup: { action: "signup", maxAttempts: 10, windowMs: 60 * 60_000 },
 };
 
 export function clientIp(headers: Headers): string {

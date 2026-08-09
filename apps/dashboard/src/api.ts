@@ -14,12 +14,18 @@ export type PolicyView = {
 };
 
 export type AuthStatus = {
+  multiTenant?: boolean;
+  signupEnabled?: boolean;
   hasPassword: boolean;
   hasTotpBackup: boolean;
-  parentCount: number;
+  parentCount?: number;
+  configuredAccounts?: number;
+  /** Always false in multi-tenant SaaS; kept for older self-host clients */
   requireSetup: boolean;
-  /** Password exists (or session) but authenticator not linked yet */
+  /** Session-scoped: authenticator not linked yet */
   requireTotp: boolean;
+  hasSession?: boolean;
+  email?: string | null;
   turnstileSiteKey?: string;
 };
 
@@ -46,6 +52,21 @@ export const api = {
     const res = await fetch("/api/v1/auth/status", { headers: getAuthHeader() });
     return res.json() as Promise<AuthStatus>;
   },
+  signup: async (email: string, password: string, turnstileToken?: string, householdName?: string) => {
+    const res = await fetch("/api/v1/auth/signup", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ email, password, turnstileToken, householdName }),
+    });
+    if (!res.ok) {
+      const data = await res.json().catch(() => ({})) as { error?: string; message?: string };
+      throw new Error(data.message ?? data.error ?? "Sign up failed");
+    }
+    const data = await res.json() as { token: string; email: string; recoveryKey: string; requireTotp?: boolean };
+    localStorage.setItem("sb_parent_token", data.token);
+    return data;
+  },
+  /** @deprecated Prefer signup(); kept for self-host without email */
   setupPassword: async (password: string, email?: string, turnstileToken?: string) => {
     const res = await fetch("/api/v1/auth/setup", {
       method: "POST",
@@ -74,17 +95,17 @@ export const api = {
     localStorage.setItem("sb_parent_token", data.token);
     return data;
   },
-  login: async (password: string, turnstileToken?: string) => {
+  login: async (email: string, password: string, turnstileToken?: string) => {
     const res = await fetch("/api/v1/auth/login", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ password, turnstileToken }),
+      body: JSON.stringify({ email, password, turnstileToken }),
     });
     if (!res.ok) {
       const data = await res.json().catch(() => ({})) as { error?: string; message?: string };
-      throw new Error(data.message ?? data.error ?? "Incorrect password");
+      throw new Error(data.message ?? data.error ?? "Incorrect email or password");
     }
-    const data = await res.json() as { token: string; email: string };
+    const data = await res.json() as { token: string; email: string; requireTotp?: boolean };
     localStorage.setItem("sb_parent_token", data.token);
     return data;
   },
@@ -112,11 +133,11 @@ export const api = {
     }
     return res.json() as Promise<{ ok: true }>;
   },
-  totpRecover: async (totpCode: string, newPassword: string, turnstileToken?: string) => {
+  totpRecover: async (email: string, totpCode: string, newPassword: string, turnstileToken?: string) => {
     const res = await fetch("/api/v1/auth/totp/recover", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ totpCode, newPassword, turnstileToken }),
+      body: JSON.stringify({ email, totpCode, newPassword, turnstileToken }),
     });
     if (!res.ok) {
       const data = await res.json().catch(() => ({})) as { message?: string };
