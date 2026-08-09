@@ -13,6 +13,18 @@ declare global {
 
 const ageLabels: Record<AgeBand, string> = { under_10: "Under 10", age_10_12: "10–12", age_13_15: "13–15", age_16_17: "16–17" };
 
+function BrandMark({ className = "" }: { className?: string }) {
+  return (
+    <img
+      className={`brand-logo ${className}`.trim()}
+      src="/logo-mark.svg"
+      width={44}
+      height={44}
+      alt="Safe Browse by Incorpify"
+    />
+  );
+}
+
 export function App() {
   const [section, setSection] = useState<"overview" | "history" | "requests">("overview");
   const [children, setChildren] = useState<Child[]>([]);
@@ -113,7 +125,7 @@ export function App() {
 
   return <div className="shell">
     <aside>
-      <a className="brand" href="#"><span className="brand-mark">S</span><span>Safe Browse<small>Family console</small></span></a>
+      <a className="brand" href="#"><BrandMark /><span>Safe Browse<small>by Incorpify</small></span></a>
       <nav>
         <button className={section === "overview" ? "active" : ""} onClick={() => setSection("overview")}>Overview</button>
         <button className={section === "history" ? "active" : ""} onClick={() => setSection("history")}>Browsing history</button>
@@ -122,7 +134,7 @@ export function App() {
       <div className="privacy-note"><span>🔒</span><p><strong>Console Protected</strong><button className="text-button" onClick={handleLogout}>Lock console</button></p></div>
     </aside>
     <main>
-      <header><div><p className="eyebrow">PARENT DASHBOARD</p><h1>{section === "overview" ? "Your family" : section === "history" ? "Browsing history" : "Access requests"}</h1></div><span className="pilot">Private pilot</span></header>
+      <header><div><p className="eyebrow">PARENT DASHBOARD</p><h1>{section === "overview" ? "Your family" : section === "history" ? "Browsing history" : "Access requests"}</h1></div><span className="pilot">SaaS pilot</span></header>
       {error && <div className="error">{error}<button onClick={() => setError(null)}>×</button></div>}
       {section === "overview" && <Overview children={children} onOpen={openPolicy} onRefresh={refresh} />}
       {section === "history" && <History events={events} />}
@@ -271,7 +283,7 @@ function ParentAuthScreen({ authStatus, onAuthenticated }: { authStatus: AuthSta
         <div className="auth-shell">
           <div className="auth-card recovery-box">
             <div className="brand-header">
-              <span className="brand-mark">✅</span>
+              <span className="logo-shine"><BrandMark /></span>
               <h2>You&apos;re protected</h2>
               <p>
                 Daily access uses your email and PIN. If you forget your PIN, open your authenticator app
@@ -310,7 +322,7 @@ function ParentAuthScreen({ authStatus, onAuthenticated }: { authStatus: AuthSta
       <div className="auth-shell">
         <div className="auth-card recovery-box">
           <div className="brand-header">
-            <span className="brand-mark">🔑</span>
+            <span className="logo-shine"><BrandMark /></span>
             <h2>Optional paper recovery key</h2>
             <p>
               Write this down if you want a backup besides your phone.
@@ -348,181 +360,349 @@ function ParentAuthScreen({ authStatus, onAuthenticated }: { authStatus: AuthSta
 
   const titles: Record<AuthMode, string> = {
     login: "Log in",
-    signup: "Create your account",
+    signup: "Create your family account",
     recover: "Paper recovery key",
     "totp-recover": "Forgot PIN — Authenticator",
   };
   const subtitles: Record<AuthMode, string> = {
-    login: "Enter your email and PIN to open child profiles and browsing history.",
-    signup: "Sign up for a free family account. Next you will link an authenticator app (required).",
-    recover: "Secondary option: enter the paper recovery key shown once at sign-up.",
-    "totp-recover": "Enter your email, the 6-digit code from your authenticator app, then choose a new PIN.",
+    login: "Email + PIN unlocks your household console.",
+    signup: "Free multi-tenant account. Next: link an authenticator (required).",
+    recover: "Use the paper key shown once at sign-up.",
+    "totp-recover": "Email + 6-digit authenticator code + new PIN.",
   };
 
+  const authForm = (
+    <form className="auth-card landing-auth-card" onSubmit={handleSubmit}>
+      <div className="brand-header">
+        <span className="logo-shine">
+          <BrandMark className="brand-logo-lg" />
+        </span>
+        <h2>Safe Browse</h2>
+        <p>Parent console · by Incorpify</p>
+      </div>
+
+      {multiTenant && (mode === "login" || mode === "signup") && (
+        <div className="auth-tabs" role="tablist">
+          <button
+            type="button"
+            role="tab"
+            className={mode === "login" ? "auth-tab active" : "auth-tab"}
+            onClick={() => { setError(null); setMode("login"); }}
+          >
+            Log in
+          </button>
+          <button
+            type="button"
+            role="tab"
+            className={mode === "signup" ? "auth-tab active" : "auth-tab"}
+            onClick={() => { setError(null); setMode("signup"); }}
+          >
+            Sign up
+          </button>
+        </div>
+      )}
+
+      {error && <div className="error">{error}</div>}
+
+      <h3>{titles[mode]}</h3>
+      <p className="subtext">{subtitles[mode]}</p>
+
+      {mode === "recover" ? (
+        <>
+          <label>
+            Emergency Recovery Key
+            <input
+              type="text"
+              placeholder="SB-XXXX-XXXX-XXXX-XXXX"
+              value={recoveryKey}
+              onChange={(e) => setRecoveryKey(e.target.value)}
+              required
+              autoFocus
+            />
+          </label>
+          <label>
+            New Master Password / PIN
+            <input
+              type="password"
+              placeholder="••••••••"
+              value={newPassword}
+              onChange={(e) => setNewPassword(e.target.value)}
+              required
+            />
+          </label>
+        </>
+      ) : mode === "totp-recover" ? (
+        <>
+          <label>
+            Email
+            <input type="email" placeholder="you@example.com" value={email} onChange={(e) => setEmail(e.target.value)} required autoFocus />
+          </label>
+          <label>
+            6-Digit Authenticator Code
+            <input
+              type="text"
+              inputMode="numeric"
+              placeholder="123456"
+              maxLength={6}
+              value={totpCode}
+              onChange={(e) => setTotpCode(e.target.value.replace(/\D/g, "").slice(0, 6))}
+              required
+            />
+          </label>
+          <label>
+            New Master Password / PIN
+            <input type="password" placeholder="••••••••" value={totpNewPassword} onChange={(e) => setTotpNewPassword(e.target.value)} required />
+          </label>
+        </>
+      ) : (
+        <>
+          <label>
+            Email
+            <input type="email" placeholder="you@example.com" value={email} onChange={(e) => setEmail(e.target.value)} required autoFocus />
+          </label>
+          {mode === "signup" && (
+            <label>
+              Household name <span style={{ opacity: 0.6 }}>(optional)</span>
+              <input type="text" placeholder="The Smith family" value={householdName} onChange={(e) => setHouseholdName(e.target.value)} maxLength={80} />
+            </label>
+          )}
+          <label>
+            {mode === "signup" ? "Choose a PIN / password" : "PIN / password"}
+            <input type="password" placeholder="••••••••" value={password} onChange={(e) => setPassword(e.target.value)} required minLength={4} />
+          </label>
+        </>
+      )}
+
+      <div id="turnstile-container" style={{ margin: "16px 0", display: "flex", justifyContent: "center" }} />
+
+      <button className="primary full" type="submit" disabled={busy}>
+        {busy
+          ? "Processing..."
+          : mode === "totp-recover" || mode === "recover"
+            ? "Reset PIN & Log in"
+            : mode === "signup"
+              ? "Create free account"
+              : "Log in"}
+      </button>
+
+      <div className="auth-footer">
+        {(mode === "login" || mode === "signup") && (
+          <>
+            <button type="button" className="text-button" onClick={() => { setError(null); setMode("totp-recover"); }}>
+              Forgot PIN? Use authenticator app
+            </button>
+            <button type="button" className="text-button" onClick={() => { setError(null); setMode("recover"); }}>
+              Use paper recovery key instead
+            </button>
+          </>
+        )}
+        {(mode === "recover" || mode === "totp-recover") && (
+          <button type="button" className="text-button" onClick={() => { setError(null); setMode("login"); }}>
+            Back to log in
+          </button>
+        )}
+      </div>
+    </form>
+  );
+
   return (
-    <div className="auth-shell">
-      <form className="auth-card" onSubmit={handleSubmit}>
-        <div className="brand-header">
-          <span className="brand-mark">S</span>
-          <h2>Safe Browse</h2>
-          <p>Parent Control Console</p>
-        </div>
+    <div className="landing">
+      <div className="landing-glow" aria-hidden />
+      <header className="landing-top">
+        <a className="landing-brand" href="https://incorpify.in" target="_blank" rel="noreferrer">
+          <span className="logo-shine"><BrandMark /></span>
+          <span>
+            Safe Browse
+            <small>by Incorpify</small>
+          </span>
+        </a>
+        <nav className="landing-nav">
+          <a href="#why">Why it matters</a>
+          <a href="#how">How it works</a>
+          <a href="#deploy">Deploy</a>
+          <a href="#scale">Scale</a>
+          <a className="landing-nav-cta" href="#console">Open console</a>
+        </nav>
+      </header>
 
-        {multiTenant && (mode === "login" || mode === "signup") && (
-          <div className="auth-tabs" role="tablist">
-            <button
-              type="button"
-              role="tab"
-              className={mode === "login" ? "auth-tab active" : "auth-tab"}
-              onClick={() => { setError(null); setMode("login"); }}
+      <section className="landing-hero">
+        <div className="landing-hero-copy">
+          <p className="landing-kicker">Privacy-first parental controls · Windows 10/11</p>
+          <h1>
+            Protect young minds
+            <span> without spying on their messages.</span>
+          </h1>
+          <p className="landing-lead">
+            Safe Browse filters harmful and addictive destinations on the PC itself—using local DNS and category lists—
+            while parents manage rules from a calm web console. No invasive TLS interception. No page content collection.
+          </p>
+          <div className="landing-cta-row">
+            <a className="primary landing-btn" href="#console">Get started free</a>
+            <a
+              className="secondary landing-btn"
+              href="https://pub-2c62cb4c92de4a818a9abc3ff05b4526.r2.dev/releases/latest/SafeBrowseSetup.msi"
             >
-              Log in
-            </button>
-            <button
-              type="button"
-              role="tab"
-              className={mode === "signup" ? "auth-tab active" : "auth-tab"}
-              onClick={() => { setError(null); setMode("signup"); }}
-            >
-              Sign up
-            </button>
+              Download Windows MSI
+            </a>
           </div>
-        )}
-
-        {error && <div className="error">{error}</div>}
-
-        <h3>{titles[mode]}</h3>
-        <p className="subtext">{subtitles[mode]}</p>
-
-        {mode === "recover" ? (
-          <>
-            <label>
-              Emergency Recovery Key
-              <input
-                type="text"
-                placeholder="SB-XXXX-XXXX-XXXX-XXXX"
-                value={recoveryKey}
-                onChange={(e) => setRecoveryKey(e.target.value)}
-                required
-                autoFocus
-              />
-            </label>
-            <label>
-              New Master Password / PIN
-              <input
-                type="password"
-                placeholder="••••••••"
-                value={newPassword}
-                onChange={(e) => setNewPassword(e.target.value)}
-                required
-              />
-            </label>
-          </>
-        ) : mode === "totp-recover" ? (
-          <>
-            <label>
-              Email
-              <input
-                type="email"
-                placeholder="you@example.com"
-                value={email}
-                onChange={(e) => setEmail(e.target.value)}
-                required
-                autoFocus
-              />
-            </label>
-            <label>
-              6-Digit Authenticator Code
-              <input
-                type="text"
-                inputMode="numeric"
-                placeholder="123456"
-                maxLength={6}
-                value={totpCode}
-                onChange={(e) => setTotpCode(e.target.value.replace(/\D/g, "").slice(0, 6))}
-                required
-              />
-            </label>
-            <label>
-              New Master Password / PIN
-              <input
-                type="password"
-                placeholder="••••••••"
-                value={totpNewPassword}
-                onChange={(e) => setTotpNewPassword(e.target.value)}
-                required
-              />
-            </label>
-          </>
-        ) : (
-          <>
-            <label>
-              Email
-              <input
-                type="email"
-                placeholder="you@example.com"
-                value={email}
-                onChange={(e) => setEmail(e.target.value)}
-                required
-                autoFocus
-              />
-            </label>
-            {mode === "signup" && (
-              <label>
-                Household name <span style={{ opacity: 0.6 }}>(optional)</span>
-                <input
-                  type="text"
-                  placeholder="The Smith family"
-                  value={householdName}
-                  onChange={(e) => setHouseholdName(e.target.value)}
-                  maxLength={80}
-                />
-              </label>
-            )}
-            <label>
-              {mode === "signup" ? "Choose a PIN / password" : "PIN / password"}
-              <input
-                type="password"
-                placeholder="••••••••"
-                value={password}
-                onChange={(e) => setPassword(e.target.value)}
-                required
-                minLength={4}
-              />
-            </label>
-          </>
-        )}
-
-        <div id="turnstile-container" style={{ margin: "16px 0", display: "flex", justifyContent: "center" }} />
-
-        <button className="primary full" type="submit" disabled={busy}>
-          {busy
-            ? "Processing..."
-            : mode === "totp-recover" || mode === "recover"
-              ? "Reset PIN & Log in"
-              : mode === "signup"
-                ? "Create account"
-                : "Log in"}
-        </button>
-
-        <div className="auth-footer">
-          {(mode === "login" || mode === "signup") && (
-            <>
-              <button type="button" className="text-button" onClick={() => { setError(null); setMode("totp-recover"); }}>
-                Forgot PIN? Use authenticator app
-              </button>
-              <button type="button" className="text-button" onClick={() => { setError(null); setMode("recover"); }}>
-                Use paper recovery key instead
-              </button>
-            </>
-          )}
-          {(mode === "recover" || mode === "totp-recover") && (
-            <button type="button" className="text-button" onClick={() => { setError(null); setMode("login"); }}>
-              Back to log in
-            </button>
-          )}
+          <ul className="landing-pills">
+            <li>Local DNS filter</li>
+            <li>Works offline after sync</li>
+            <li>Multi-family SaaS</li>
+            <li>Optional self-host</li>
+          </ul>
         </div>
-      </form>
+        <div className="landing-hero-art" aria-hidden>
+          <div className="logo-shine logo-shine-xl">
+            <img src="/logo-mark.svg" alt="" width={160} height={160} />
+          </div>
+          <img className="wordmark-mint" src="/incorpify-wordmark-mint.png" alt="Incorpify" />
+        </div>
+      </section>
+
+      <section id="why" className="landing-section">
+        <div className="landing-section-head">
+          <p className="eyebrow">Why it matters</p>
+          <h2>Social feeds are engineered for attention—not childhood.</h2>
+          <p>
+            Safe Browse exists because parents need practical boundaries for the open web and app ecosystems,
+            without turning the home into a surveillance lab.
+          </p>
+        </div>
+        <div className="stat-grid">
+          <article>
+            <strong>11%</strong>
+            <span>of adolescents show signs of <em>problematic social media use</em> (WHO Europe, 2022 data; up from 7% in 2018).</span>
+          </article>
+          <article>
+            <strong>~2.5×</strong>
+            <span>higher likelihood of recent depression symptoms among teens with high daily screen time vs peers (CDC analysis of U.S. teens).</span>
+          </article>
+          <article>
+            <strong>45%</strong>
+            <span>of teens say they spend too much time on social media (Pew Research Center, 2024–25).</span>
+          </article>
+          <article>
+            <strong>24%+</strong>
+            <span>of adolescents meet criteria for social media addiction in recent reviews—linked to anxiety, low mood, and attention strain.</span>
+          </article>
+        </div>
+        <p className="landing-cite">
+          Sources: WHO/Europe adolescent digital health briefings; CDC Preventing Chronic Disease screen-time analyses;
+          Pew Research Center teens &amp; social media surveys; APA guidance on adolescent social media use.
+          Stats describe associations—not destiny. Boundaries still help.
+        </p>
+      </section>
+
+      <section id="how" className="landing-section landing-section-alt">
+        <div className="landing-section-head">
+          <p className="eyebrow">How it works</p>
+          <h2>Cloud for parents. Enforcement on the PC.</h2>
+        </div>
+        <div className="how-grid">
+          <article>
+            <span className="how-step">1</span>
+            <h3>Parent console</h3>
+            <p>Sign up, add children, pick age bands &amp; categories, approve access requests, generate enrollment codes.</p>
+          </article>
+          <article>
+            <span className="how-step">2</span>
+            <h3>Windows agent</h3>
+            <p>Lightweight service on the kid PC: local DNS proxy on 127.0.0.1:53, policy engine, optional browser native messaging.</p>
+          </article>
+          <article>
+            <span className="how-step">3</span>
+            <h3>What we record</h3>
+            <p>Only top-level domains and block events—not page paths, search queries, titles, or chat content.</p>
+          </article>
+          <article>
+            <span className="how-step">4</span>
+            <h3>Offline resilience</h3>
+            <p>After policy &amp; lists sync, filtering continues when the cloud is unreachable.</p>
+          </article>
+        </div>
+      </section>
+
+      <section id="deploy" className="landing-section">
+        <div className="landing-section-head">
+          <p className="eyebrow">Deploy</p>
+          <h2>Zero-effort SaaS—or your own Cloudflare account.</h2>
+        </div>
+        <div className="deploy-grid">
+          <article className="deploy-card deploy-card-featured">
+            <p className="deploy-badge">Recommended</p>
+            <h3>Hosted by Incorpify · 0 ops for parents</h3>
+            <p>
+              Use this site. Create an account, download the MSI, enroll the PC.
+              We run the Worker, D1, and shared blocklist storage.
+            </p>
+            <ul>
+              <li>No Cloudflare account required</li>
+              <li>Multi-family SaaS on <code>safebrowse.incorpify.in</code></li>
+              <li>MSI from public R2 downloads</li>
+            </ul>
+            <a className="primary landing-btn" href="#console">Open console →</a>
+          </article>
+          <article className="deploy-card">
+            <p className="deploy-badge quiet">Advanced</p>
+            <h3>Self-host on your Cloudflare account</h3>
+            <p>
+              Prefer data only under your CF tenancy? Clone the open repo and run one-click deploy.
+            </p>
+            <ul>
+              <li><code>bash tools/deploy.sh</code> with your API token</li>
+              <li>Creates D1, R2 lists, Turnstile, Worker + dashboard</li>
+              <li>Point the agent <code>ApiBaseUrl</code> at your Worker</li>
+            </ul>
+            <a className="secondary landing-btn" href="https://github.com/Incorpify-LLC/safe_browse" target="_blank" rel="noreferrer">
+              GitHub repo &amp; docs
+            </a>
+          </article>
+        </div>
+      </section>
+
+      <section id="scale" className="landing-section landing-section-alt">
+        <div className="landing-section-head">
+          <p className="eyebrow">Scale</p>
+          <h2>Start free. Grow deliberately.</h2>
+        </div>
+        <div className="scale-grid">
+          <article>
+            <h3>Family pilot</h3>
+            <p>One household, a few Windows PCs, shared category lists, 30-day history retention.</p>
+          </article>
+          <article>
+            <h3>Many families (SaaS)</h3>
+            <p>Row-level isolation by household; shared R2 blocklists so cost stays near Cloudflare free-tier for early scale.</p>
+          </article>
+          <article>
+            <h3>When you grow</h3>
+            <p>Raise device caps, tighten rate limits, add paid plans, custom domains, and GitHub Actions for Incorpify deploys—without redesigning the agent.</p>
+          </article>
+        </div>
+      </section>
+
+      <section id="console" className="landing-console">
+        <div className="landing-console-copy">
+          <p className="eyebrow">Console</p>
+          <h2>Ready when you are.</h2>
+          <p>Sign up free, protect a Windows PC in minutes, tighten categories as habits change.</p>
+          <div className="landing-mini-links">
+            <a href="https://github.com/Incorpify-LLC/safe_browse/blob/main/docs/windows_remote_access_setup.md" target="_blank" rel="noreferrer">Install on a kid PC</a>
+            <a href="https://github.com/Incorpify-LLC/safe_browse/blob/main/docs/saas-multitenant-plan.md" target="_blank" rel="noreferrer">SaaS architecture</a>
+            <a href="https://incorpify.in" target="_blank" rel="noreferrer">incorpify.in</a>
+          </div>
+        </div>
+        {authForm}
+      </section>
+
+      <footer className="landing-footer">
+        <span className="logo-shine"><BrandMark className="brand-logo-sm" /></span>
+        <p>
+          © {new Date().getFullYear()} Incorpify LLC · Safe Browse · Apache-2.0 application code ·
+          Blocklist data retains upstream licenses where applicable.
+        </p>
+      </footer>
     </div>
   );
 }
@@ -562,7 +742,7 @@ function TotpSetupWizard({
     <div className="auth-shell">
       <div className="auth-card recovery-box">
         <div className="brand-header">
-          <span className="brand-mark">📱</span>
+          <span className="logo-shine"><BrandMark /></span>
           <h2>Link Your Authenticator App</h2>
           <p>
             {required
