@@ -345,7 +345,7 @@ Keep `deploy.sh` for technical families; document “advanced / single-tenant”
 | **1** | **Multi-tenant auth API** — `POST /signup`, email+password `login`, session-aware `/status`, TOTP recover by email; legacy `/setup` kept | **Done** (local integration smoke `VERIFY_OK`) |
 | **2** | **Dashboard** — Sign up / Log in UI; stop using global `requireSetup` monopoly | **Done** |
 | **3** | **Isolation tests** + stronger enroll codes | **Done** (12-char codes; isolation.integration.test.ts green) |
-| **4** | **Production deploy** on Incorpify CF + custom domain `safebrowse.incorpify.in` | Pending |
+| **4** | **Production deploy** on Incorpify CF + custom domain `safebrowse.incorpify.in` | **Done** (live) |
 | **5** | **MSI default `ApiBaseUrl`** → production + dogfood two households | Pending |
 
 Hostname decision: **`https://safebrowse.incorpify.in`** (same CF zone as incorpify.in).

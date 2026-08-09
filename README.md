@@ -72,7 +72,21 @@ Or use the scripted installer (when you have the full release folder with `bin\`
 
 ---
 
-## Parent cloud (one-click deploy)
+## Live SaaS (Incorpify-hosted)
+
+| | |
+| :--- | :--- |
+| **Parent app** | **https://safebrowse.incorpify.in** |
+| **Also** | https://safe-browse-api.saneax.workers.dev |
+| **Mode** | Multi-tenant: **Sign up** / **Log in** with email + PIN + authenticator |
+
+Device API base for agents:
+
+```text
+https://safebrowse.incorpify.in/api/v1/device/
+```
+
+### Self-host (advanced)
 
 ```bash
 git clone https://github.com/Incorpify-LLC/safe_browse.git
@@ -81,8 +95,7 @@ cd safe_browse
 bash tools/deploy.sh
 ```
 
-Creates D1, R2 list bucket, Turnstile widget, builds the dashboard, and deploys the Worker.  
-Details: [docs/deployment.md](docs/deployment.md) · Parent auth: [docs/parent-auth.md](docs/parent-auth.md)
+Details: [docs/deployment.md](docs/deployment.md) · Parent auth: [docs/parent-auth.md](docs/parent-auth.md) · SaaS plan: [docs/saas-multitenant-plan.md](docs/saas-multitenant-plan.md)
 
 ---
 

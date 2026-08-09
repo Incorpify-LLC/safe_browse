@@ -69,8 +69,12 @@ export function generateEnrollmentCode(): string {
   return `${raw.slice(0, 4)}-${raw.slice(4, 8)}-${raw.slice(8, 12)}`;
 }
 
-/** PBKDF2-HMAC-SHA256 params: balanced for Workers CPU vs offline cracking of short PINs. */
-const PBKDF2_ITERS = 120_000;
+/**
+ * PBKDF2-HMAC-SHA256 params.
+ * Workers free plan has tight CPU budgets; 80k is a practical balance for short PINs.
+ * verifyPassword upgrades hashes stored with fewer iterations on successful login.
+ */
+const PBKDF2_ITERS = 80_000;
 const PBKDF2_SALT_BYTES = 16;
 const PBKDF2_KEY_BITS = 256;
 const PBKDF2_PREFIX = "pbkdf2$sha256$";

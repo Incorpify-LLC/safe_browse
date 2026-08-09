@@ -12,11 +12,12 @@
     "not_found_handling": "single-page-application",
     "run_worker_first": ["/api/*", "/health"]
   },
+  // Top-level = production SaaS (safebrowse.incorpify.in). Local tests use --env development.
   "vars": {
-    "ENVIRONMENT": "development",
+    "ENVIRONMENT": "production",
     "ACCESS_TEAM_DOMAIN": "safe-browse.cloudflareaccess.com",
     "ACCESS_AUD": "replace-with-access-aud-tag",
-    "EMAIL_FROM": "Safe Browse <alerts@example.com>",
+    "EMAIL_FROM": "Safe Browse <noreply@incorpify.in>",
     "TURNSTILE_SITE_KEY": "1x00000000000000000000AA",
     "TURNSTILE_SECRET_KEY": "1x0000000000000000000000000000000AA"
   },
@@ -24,48 +25,23 @@
     {
       "binding": "DB",
       "database_name": "safe-browse",
-      "database_id": "85d7acbc-1c5e-4968-8e93-2a9fe5aba861",
+      "database_id": "2bdbb275-85c2-4d55-8b9c-c4fc1cb8324f",
       "migrations_dir": "migrations"
     }
   ],
   "r2_buckets": [
     { "binding": "LISTS", "bucket_name": "safe-browse-lists" }
   ],
-  "send_email": [
-    { "name": "EMAIL" }
-  ],
   "triggers": { "crons": ["*/5 * * * *", "17 2 * * *"] },
+  "routes": [
+    { "pattern": "safebrowse.incorpify.in", "custom_domain": true }
+  ],
   "observability": {
     "enabled": true,
     "logs": { "enabled": true, "head_sampling_rate": 1 },
     "traces": { "enabled": true, "head_sampling_rate": 0.05 }
   },
-  "env": {
-    "staging": {
-      "name": "safe-browse-api-staging",
-      "vars": {
-        "ENVIRONMENT": "staging",
-        "ACCESS_TEAM_DOMAIN": "replace.cloudflareaccess.com",
-        "ACCESS_AUD": "replace-with-staging-aud",
-        "EMAIL_FROM": "Safe Browse <alerts@example.com>"
-      },
-      "d1_databases": [{ "binding": "DB", "database_name": "safe-browse-staging", "database_id": "11111111-1111-1111-1111-111111111111", "migrations_dir": "migrations" }],
-      "r2_buckets": [{ "binding": "LISTS", "bucket_name": "safe-browse-lists-staging" }],
-      "send_email": [{ "name": "EMAIL" }]
-    },
-    "production": {
-      "name": "safe-browse-api-production",
-      "workers_dev": false,
-      "preview_urls": false,
-      "vars": {
-        "ENVIRONMENT": "production",
-        "ACCESS_TEAM_DOMAIN": "replace.cloudflareaccess.com",
-        "ACCESS_AUD": "replace-with-production-aud",
-        "EMAIL_FROM": "Safe Browse <alerts@example.com>"
-      },
-      "d1_databases": [{ "binding": "DB", "database_name": "safe-browse", "database_id": "22222222-2222-2222-2222-222222222222", "migrations_dir": "migrations" }],
-      "r2_buckets": [{ "binding": "LISTS", "bucket_name": "safe-browse-lists" }],
-      "send_email": [{ "name": "EMAIL" }]
-    }
-  }
 }
+
+
+

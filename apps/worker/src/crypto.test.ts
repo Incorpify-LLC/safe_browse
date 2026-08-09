@@ -37,7 +37,7 @@ describe("credential helpers", () => {
   it("hashes passwords with unique salts and verifies", async () => {
     const a = await hashPassword("1234");
     const b = await hashPassword("1234");
-    expect(a).toMatch(/^pbkdf2\$sha256\$120000\$/);
+    expect(a).toMatch(/^pbkdf2\$sha256\$80000\$/);
     expect(a).not.toBe(b);
     expect((await verifyPassword("1234", a)).ok).toBe(true);
     expect((await verifyPassword("9999", a)).ok).toBe(false);

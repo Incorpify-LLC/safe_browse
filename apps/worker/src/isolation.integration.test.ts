@@ -54,12 +54,21 @@ describe("multi-tenant isolation", () => {
   }
 
   beforeAll(async () => {
+    // Ensure local D1 has migrations (top-level local DB used by unstable_dev)
+    const { execSync } = await import("node:child_process");
+    execSync("npx wrangler d1 migrations apply safe-browse --local --config wrangler.jsonc", {
+      stdio: "inherit",
+    });
     worker = await unstable_dev("src/index.ts", {
       config: "wrangler.jsonc",
       experimental: { disableExperimentalWarning: true },
       local: true,
+      // Override production CSRF gate for local tests (same-origin middleware).
+      vars: {
+        ENVIRONMENT: "development",
+      },
     });
-  }, 60_000);
+  }, 90_000);
 
   afterAll(async () => {
     await worker?.stop();

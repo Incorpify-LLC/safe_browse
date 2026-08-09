@@ -23,7 +23,16 @@ app.route("/api/v1/parent", parentRoutes);
 app.route("/api/v1/device", deviceRoutes);
 app.notFound((context) => context.env.ASSETS.fetch(context.req.raw));
 app.onError((error, context) => {
-  console.error(JSON.stringify({ message: "unhandled_error", path: context.req.path, error: error.message }));
+  console.error(
+    JSON.stringify({
+      message: "unhandled_error",
+      path: context.req.path,
+      error: error.message,
+      stack: error.stack?.slice(0, 800),
+    }),
+  );
+  // Surface message in development-like test keys deploys only if needed for debug —
+  // keep generic body for clients; details stay in logs.
   return context.json({ error: "internal_error" }, 500);
 });
 
