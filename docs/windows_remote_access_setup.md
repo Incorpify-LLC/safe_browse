@@ -111,13 +111,28 @@ You should see `LISTENING` for port **22** (and **3389** if you enabled RDP).
 
 Safe Browse installs as a Windows service named **Safe Browse Protection**. It filters DNS locally (even offline after policies are cached).
 
-You need the **release package** on this PC first (USB stick, shared folder, or download from the parent machine / GitHub).
+You need the **installer** on this PC first. Prefer the **Cloudflare R2 download** (no Git required).
 
-### What the release folder looks like
+### Fast path: download MSI from R2
+
+```powershell
+# Elevated PowerShell optional for download; required for install
+$uri = "https://pub-2c62cb4c92de4a818a9abc3ff05b4526.r2.dev/releases/latest/SafeBrowseSetup.msi"
+$msi = "$env:USERPROFILE\Downloads\SafeBrowseSetup.msi"
+Invoke-WebRequest -Uri $uri -OutFile $msi
+# Optional integrity check:
+# Get-FileHash $msi -Algorithm SHA256
+# Expected 0.1.0: 93fb439ea9daa620637bdfea643f143ad7c0708bd70c02afaebd518638388abb
+```
+
+Manifest (version, SHA-256, script URLs):  
+https://pub-2c62cb4c92de4a818a9abc3ff05b4526.r2.dev/releases/latest.json
+
+### What a full release folder looks like
 
 ```
 SafeBrowse-0.1.0-win-x64\          (or apps\windows\releases\0.1.0\)
-  SafeBrowseSetup.msi              ≈ 144 MB  (Git LFS)
+  SafeBrowseSetup.msi              ≈ 144 MB
   Install-SafeBrowse.ps1
   Uninstall-SafeBrowse.ps1
   configure-protection.ps1
@@ -125,11 +140,11 @@ SafeBrowse-0.1.0-win-x64\          (or apps\windows\releases\0.1.0\)
   bin\                             (present in full release package)
 ```
 
-| How the parent can get the package | Notes |
+| How to get the package | Notes |
 | :--- | :--- |
-| **GitHub (with LFS)** | `git lfs install` then `git lfs pull` after clone — MSI is large |
+| **R2 (recommended)** | [Latest MSI](https://pub-2c62cb4c92de4a818a9abc3ff05b4526.r2.dev/releases/latest/SafeBrowseSetup.msi) · [latest.json](https://pub-2c62cb4c92de4a818a9abc3ff05b4526.r2.dev/releases/latest.json) |
+| **GitHub (with LFS)** | `git lfs install` then `git lfs pull` — MSI is large |
 | **Repo path** | `apps/windows/releases/0.1.0/` |
-| **Full package build** | `apps/windows/scripts/Package-Release.ps1` on a Windows build machine |
 | **USB / network share** | Copy the whole release folder to the kid’s PC |
 
 ---
@@ -174,19 +189,26 @@ If the parent dashboard / Worker is already deployed, set the device API URL at 
 
 ---
 
-## B2. Alternative: MSI installer
+## B2. Alternative: MSI installer (including R2 download)
 
-Simplest double-click style install (service + Program Files). **Hardening is a second step.**
+Simplest path: download MSI → install → harden. **Hardening is a second step.**
 
 ```powershell
-cd C:\Users\Public\SafeBrowse-0.1.0-win-x64
+# Download latest MSI from Cloudflare R2
+$msi = "$env:USERPROFILE\Downloads\SafeBrowseSetup.msi"
+Invoke-WebRequest `
+  -Uri "https://pub-2c62cb4c92de4a818a9abc3ff05b4526.r2.dev/releases/latest/SafeBrowseSetup.msi" `
+  -OutFile $msi
 
-# Quiet install
-msiexec /i SafeBrowseSetup.msi /qn
+# Quiet install (elevated)
+msiexec /i $msi /qn
 
-# Wait a few seconds, then harden DNS (elevated)
+# Harden DNS (elevated)
+Invoke-WebRequest `
+  -Uri "https://pub-2c62cb4c92de4a818a9abc3ff05b4526.r2.dev/releases/0.1.0/configure-protection.ps1" `
+  -OutFile "$env:TEMP\configure-protection.ps1"
 Set-ExecutionPolicy -Scope Process -ExecutionPolicy Bypass
-.\configure-protection.ps1 -Action Install
+& "$env:TEMP\configure-protection.ps1" -Action Install
 ```
 
 Or double-click **`SafeBrowseSetup.msi`**, finish the wizard, then run `configure-protection.ps1 -Action Install` elevated.

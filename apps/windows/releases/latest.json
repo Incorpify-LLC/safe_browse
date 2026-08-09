@@ -1,0 +1,23 @@
+{
+  "name": "Safe Browse",
+  "version": "0.1.0",
+  "platform": "win-x64",
+  "publishedAt": "2026-08-09T06:45:01Z",
+  "msi": {
+    "file": "SafeBrowseSetup.msi",
+    "sizeBytes": 150171648,
+    "sha256": "93fb439ea9daa620637bdfea643f143ad7c0708bd70c02afaebd518638388abb",
+    "url": "https://pub-2c62cb4c92de4a818a9abc3ff05b4526.r2.dev/releases/0.1.0/SafeBrowseSetup.msi",
+    "latestUrl": "https://pub-2c62cb4c92de4a818a9abc3ff05b4526.r2.dev/releases/latest/SafeBrowseSetup.msi"
+  },
+  "scripts": {
+    "install": "https://pub-2c62cb4c92de4a818a9abc3ff05b4526.r2.dev/releases/0.1.0/Install-SafeBrowse.ps1",
+    "uninstall": "https://pub-2c62cb4c92de4a818a9abc3ff05b4526.r2.dev/releases/0.1.0/Uninstall-SafeBrowse.ps1",
+    "configureProtection": "https://pub-2c62cb4c92de4a818a9abc3ff05b4526.r2.dev/releases/0.1.0/configure-protection.ps1"
+  },
+  "readme": "https://pub-2c62cb4c92de4a818a9abc3ff05b4526.r2.dev/releases/0.1.0/README.md",
+  "docs": {
+    "windowsSetup": "https://github.com/Incorpify-LLC/safe_browse/blob/main/docs/windows_remote_access_setup.md",
+    "deployment": "https://github.com/Incorpify-LLC/safe_browse/blob/main/docs/deployment.md"
+  }
+}
