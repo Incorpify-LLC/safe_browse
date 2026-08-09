@@ -110,6 +110,12 @@ main { padding:40px 5vw 80px; max-width:1500px;width:100%;margin:auto;align-self
 .landing-auth-card{width:100%;max-width:400px;margin:0;box-shadow:0 30px 80px #00000066}
 .landing-footer{max-width:1180px;margin:0 auto;padding:8px 22px 40px;display:flex;gap:14px;align-items:center;color:#7fa898;font-size:12px}
 .landing-footer p{margin:0;line-height:1.5}
+.install-box{background:#102d24ee;border:1px solid #2a5244;border-radius:18px;padding:22px 20px;box-shadow:0 20px 50px #00000040;max-width:900px}
+.install-label{margin:0 0 8px;font-size:12px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:#8fd9b6}
+.install-label + .install-code + .install-label{margin-top:18px}
+.install-code{margin:0 0 8px;padding:14px 16px;border-radius:12px;background:#071612;border:1px solid #1e4035;color:#b8f0d4;font:500 12.5px/1.45 ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;overflow-x:auto;white-space:pre-wrap;word-break:break-word}
+.install-note{margin:14px 0 0;color:#9fcbb8;font-size:13px;line-height:1.55}
+.install-note a{color:#9af0c4;font-weight:600}
 @media(max-width:960px){
   .landing-hero,.landing-console,.deploy-grid{grid-template-columns:1fr}
   .stat-grid,.how-grid{grid-template-columns:1fr 1fr}
