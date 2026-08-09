@@ -36,9 +36,7 @@ npx wrangler deploy --config apps/worker/wrangler.jsonc --env=""
 
 ## Notes / follow-ups
 
-1. **Turnstile** still uses Cloudflare **test** keys (banner in UI). Create a production widget for `safebrowse.incorpify.in` and set:
-   - site key as `vars` or secret
-   - **secret** only via `npx wrangler secret put TURNSTILE_SECRET_KEY`
+1. **Turnstile** uses the Incorpify production widget (site key in `wrangler.jsonc` vars; **secret** only via `wrangler secret put TURNSTILE_SECRET_KEY` — never commit the secret). Domains on the widget must include `safebrowse.incorpify.in` (and workers.dev if you use that host).
 2. **Email alerts** (CF Email / Resend) not wired yet — optional.
 3. **Local DNS** on some machines may lag for the new subdomain; public resolvers (`1.1.1.1`) resolve to Cloudflare anycast.
 4. PBKDF2 iterations set to **80_000** for Workers CPU budgets (hashes rehashed on login if lower).
