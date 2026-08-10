@@ -2,6 +2,7 @@ import { createRemoteJWKSet, jwtVerify } from "jose";
 import type { Context, Next } from "hono";
 import { isDevelopment, type AppBindings, type AppVariables } from "./types";
 import { sha256 } from "./crypto";
+import { clearSession, isSessionLive, touchSession } from "./session";
 
 export async function parentAuth(context: Context<{ Bindings: AppBindings; Variables: AppVariables }>, next: Next) {
   const env = context.env;
@@ -18,13 +19,26 @@ export async function parentAuth(context: Context<{ Bindings: AppBindings; Varia
     if (token) {
       const tokenHash = await sha256(token);
       const row = await env.DB.prepare(
-        `SELECT p.id, p.household_id AS householdId, p.email, p.totp_secret AS totpSecret, p.password_hash AS passwordHash
+        `SELECT p.id, p.household_id AS householdId, p.email, p.totp_secret AS totpSecret, p.password_hash AS passwordHash,
+                p.session_expires_at AS sessionExpiresAt, p.session_last_used_at AS sessionLastUsedAt
          FROM parents p WHERE p.session_token = ?`,
-      ).bind(tokenHash).first<{ id: string; householdId: string; email: string; totpSecret: string | null; passwordHash: string | null }>();
+      ).bind(tokenHash).first<{
+        id: string; householdId: string; email: string; totpSecret: string | null; passwordHash: string | null;
+        sessionExpiresAt: string | null; sessionLastUsedAt: string | null;
+      }>();
       if (row) {
-        parent = { id: row.id, householdId: row.householdId, email: row.email };
-        totpSecret = row.totpSecret;
-        hasPassword = Boolean(row.passwordHash);
+        if (isSessionLive(row)) {
+          parent = { id: row.id, householdId: row.householdId, email: row.email };
+          totpSecret = row.totpSecret;
+          hasPassword = Boolean(row.passwordHash);
+          // Sliding idle window. Throttled internally, so this is not a write per request.
+          await touchSession(env.DB, tokenHash, row);
+        } else {
+          // Expired or predates migration 0006. Drop the row's token so the stale
+          // hash cannot be probed again, then fall through to the 401 below.
+          await clearSession(env.DB, tokenHash);
+          return context.json({ error: "session_expired", message: "Your session has expired. Please sign in again." }, 401);
+        }
       }
     }
   }

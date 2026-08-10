@@ -6,6 +6,7 @@ import { hashPassword, sha256, verifyPassword } from "../crypto";
 import { ensureParent } from "../auth";
 import { verifyTurnstileToken } from "../turnstile";
 import { sendParentSecurityAlert } from "../alerts";
+import { clearSession, createSession, isSessionLive } from "../session";
 import { generateTotpSecret, buildOtpAuthUri, verifyTotp } from "../totp";
 import { checkRateLimit, clearRateLimit, clientIp, recordFailure } from "../rate-limit";
 
@@ -100,9 +101,16 @@ async function requireSession(
   const token = authHeader.slice(7).trim();
   const tokenHash = await sha256(token);
   const parent = await context.env.DB.prepare(
-    `SELECT id, email, totp_secret FROM parents WHERE session_token = ?`,
-  ).bind(tokenHash).first<{ id: string; email: string; totp_secret: string | null }>();
-  if (!parent) {
+    `SELECT id, email, totp_secret,
+            session_expires_at AS sessionExpiresAt, session_last_used_at AS sessionLastUsedAt
+     FROM parents WHERE session_token = ?`,
+  ).bind(tokenHash).first<{
+    id: string; email: string; totp_secret: string | null;
+    sessionExpiresAt: string | null; sessionLastUsedAt: string | null;
+  }>();
+  // An expired session must not authenticate TOTP setup either, or expiry could be
+  // sidestepped by going straight to the enrollment routes.
+  if (!parent || !isSessionLive(parent)) {
     return new Response(JSON.stringify({ error: "unauthorized" }), {
       status: 401,
       headers: { "Content-Type": "application/json" },
@@ -172,10 +180,14 @@ async function findParentByPasswordOnly(
 }
 
 async function issueSession(db: D1Database, parentId: string): Promise<string> {
-  const sessionToken = crypto.randomUUID() + "-" + crypto.randomUUID();
-  const tokenHash = await sha256(sessionToken);
-  await db.prepare(`UPDATE parents SET session_token = ? WHERE id = ?`).bind(tokenHash, parentId).run();
-  return sessionToken;
+  const session = await createSession();
+  await db
+    .prepare(
+      `UPDATE parents SET session_token = ?, session_expires_at = ?, session_last_used_at = ? WHERE id = ?`,
+    )
+    .bind(session.tokenHash, session.expiresAt, session.lastUsedAt, parentId)
+    .run();
+  return session.sessionToken;
 }
 
 /** Create household + parent with password, recovery key, and session. */
@@ -201,8 +213,7 @@ async function provisionParentAccount(
   const passwordHash = await hashPassword(opts.password);
   const rawKey = generateRecoveryKey();
   const recoveryHash = await sha256(`sb_rec_${normalizeKey(rawKey)}`);
-  const sessionToken = crypto.randomUUID() + "-" + crypto.randomUUID();
-  const tokenHash = await sha256(sessionToken);
+  const session = await createSession();
   const now = new Date().toISOString();
 
   let parentId: string;
@@ -212,9 +223,11 @@ async function provisionParentAccount(
     parentId = existing.id;
     await db
       .prepare(
-        `UPDATE parents SET password_hash = ?, recovery_key_hash = ?, session_token = ?, totp_secret = NULL WHERE id = ?`,
+        `UPDATE parents SET password_hash = ?, recovery_key_hash = ?, session_token = ?,
+                            session_expires_at = ?, session_last_used_at = ?, totp_secret = NULL
+         WHERE id = ?`,
       )
-      .bind(passwordHash, recoveryHash, tokenHash, parentId)
+      .bind(passwordHash, recoveryHash, session.tokenHash, session.expiresAt, session.lastUsedAt, parentId)
       .run();
   } else {
     const householdId = crypto.randomUUID();
@@ -226,14 +239,18 @@ async function provisionParentAccount(
         .bind(householdId, householdName, "UTC", now),
       db
         .prepare(
-          `INSERT INTO parents(id,household_id,email,created_at,password_hash,recovery_key_hash,session_token,totp_secret)
-           VALUES(?,?,?,?,?,?,?,NULL)`,
+          `INSERT INTO parents(id,household_id,email,created_at,password_hash,recovery_key_hash,session_token,
+                               session_expires_at,session_last_used_at,totp_secret)
+           VALUES(?,?,?,?,?,?,?,?,?,NULL)`,
         )
-        .bind(parentId, householdId, email, now, passwordHash, recoveryHash, tokenHash),
+        .bind(
+          parentId, householdId, email, now, passwordHash, recoveryHash,
+          session.tokenHash, session.expiresAt, session.lastUsedAt,
+        ),
     ]);
   }
 
-  return { parentId, email, sessionToken, recoveryKey: rawKey };
+  return { parentId, email, sessionToken: session.sessionToken, recoveryKey: rawKey };
 }
 
 // ── Status (multi-tenant aware) ───────────────────────────────────────────────
@@ -248,11 +265,18 @@ app.get("/status", async (context) => {
   if (authHeader?.startsWith("Bearer ")) {
     const tokenHash = await sha256(authHeader.slice(7).trim());
     const me = await context.env.DB.prepare(
-      `SELECT email, password_hash, totp_secret FROM parents WHERE session_token = ?`,
+      `SELECT email, password_hash, totp_secret,
+              session_expires_at AS sessionExpiresAt, session_last_used_at AS sessionLastUsedAt
+       FROM parents WHERE session_token = ?`,
     )
       .bind(tokenHash)
-      .first<{ email: string; password_hash: string | null; totp_secret: string | null }>();
-    if (me) {
+      .first<{
+        email: string; password_hash: string | null; totp_secret: string | null;
+        sessionExpiresAt: string | null; sessionLastUsedAt: string | null;
+      }>();
+    // Report an expired session as signed-out so the dashboard shows the login form
+    // rather than a half-authenticated console.
+    if (me && isSessionLive(me)) {
       session = {
         email: me.email,
         hasPassword: Boolean(me.password_hash),
@@ -307,7 +331,7 @@ app.post("/signup", async (context) => {
   const emailLimited = await checkRateLimit(context.env.DB, "signup", `email:${email}`);
   if (!emailLimited.allowed) return rateLimitedResponse(emailLimited.retryAfterSec);
 
-  const turnstileOk = await verifyTurnstileToken(context.env.TURNSTILE_SECRET_KEY, body.turnstileToken, ip);
+  const turnstileOk = await verifyTurnstileToken(context.env, body.turnstileToken, ip);
   if (!turnstileOk) {
     return context.json({ error: "turnstile_failed", message: "CAPTCHA bot verification failed. Please try again." }, 400);
   }
@@ -395,7 +419,7 @@ app.post("/totp/recover", async (context) => {
   const limited = await checkRateLimit(context.env.DB, "totp-recover", ip);
   if (!limited.allowed) return rateLimitedResponse(limited.retryAfterSec);
 
-  const turnstileOk = await verifyTurnstileToken(context.env.TURNSTILE_SECRET_KEY, body.turnstileToken, ip);
+  const turnstileOk = await verifyTurnstileToken(context.env, body.turnstileToken, ip);
   if (!turnstileOk) {
     return context.json({ error: "turnstile_failed", message: "CAPTCHA verification failed. Please try again." }, 400);
   }
@@ -454,7 +478,7 @@ app.post("/setup", async (context) => {
     const limited = await checkRateLimit(context.env.DB, "signup", ip);
     if (!limited.allowed) return rateLimitedResponse(limited.retryAfterSec);
 
-    const turnstileOk = await verifyTurnstileToken(context.env.TURNSTILE_SECRET_KEY, body.turnstileToken, ip);
+    const turnstileOk = await verifyTurnstileToken(context.env, body.turnstileToken, ip);
     if (!turnstileOk) {
       return context.json({ error: "turnstile_failed", message: "CAPTCHA bot verification failed. Please try again." }, 400);
     }
@@ -497,7 +521,7 @@ app.post("/setup", async (context) => {
   const limited = await checkRateLimit(context.env.DB, "setup", ip);
   if (!limited.allowed) return rateLimitedResponse(limited.retryAfterSec);
 
-  const turnstileOk = await verifyTurnstileToken(context.env.TURNSTILE_SECRET_KEY, body.turnstileToken, ip);
+  const turnstileOk = await verifyTurnstileToken(context.env, body.turnstileToken, ip);
   if (!turnstileOk) {
     return context.json({ error: "turnstile_failed", message: "CAPTCHA bot verification failed. Please try again." }, 400);
   }
@@ -508,18 +532,19 @@ app.post("/setup", async (context) => {
 
   const rawKey = generateRecoveryKey();
   const recoveryHash = await sha256(`sb_rec_${normalizeKey(rawKey)}`);
-  const sessionToken = crypto.randomUUID() + "-" + crypto.randomUUID();
-  const tokenHash = await sha256(sessionToken);
+  const session = await createSession();
 
   await context.env.DB.prepare(
-    `UPDATE parents SET password_hash = ?, recovery_key_hash = ?, session_token = ?, totp_secret = NULL WHERE id = ?`,
-  ).bind(passwordHash, recoveryHash, tokenHash, parent.id).run();
+    `UPDATE parents SET password_hash = ?, recovery_key_hash = ?, session_token = ?,
+                        session_expires_at = ?, session_last_used_at = ?, totp_secret = NULL
+     WHERE id = ?`,
+  ).bind(passwordHash, recoveryHash, session.tokenHash, session.expiresAt, session.lastUsedAt, parent.id).run();
 
   await clearRateLimit(context.env.DB, "setup", ip);
   void sendParentSecurityAlert(context.env, parent.email, "password.created", { ipAddress: ip, userAgent });
 
   return context.json({
-    token: sessionToken,
+    token: session.sessionToken,
     email: parent.email,
     recoveryKey: rawKey,
     requireTotp: true,
@@ -547,7 +572,7 @@ app.post("/login", async (context) => {
   const limited = await checkRateLimit(context.env.DB, "login", ip);
   if (!limited.allowed) return rateLimitedResponse(limited.retryAfterSec);
 
-  const turnstileOk = await verifyTurnstileToken(context.env.TURNSTILE_SECRET_KEY, body.turnstileToken, ip);
+  const turnstileOk = await verifyTurnstileToken(context.env, body.turnstileToken, ip);
   if (!turnstileOk) {
     return context.json({ error: "turnstile_failed", message: "CAPTCHA bot verification failed. Please try again." }, 400);
   }
@@ -604,7 +629,7 @@ app.post("/recover", async (context) => {
   const limited = await checkRateLimit(context.env.DB, "recover", ip);
   if (!limited.allowed) return rateLimitedResponse(limited.retryAfterSec);
 
-  const turnstileOk = await verifyTurnstileToken(context.env.TURNSTILE_SECRET_KEY, body.turnstileToken, ip);
+  const turnstileOk = await verifyTurnstileToken(context.env, body.turnstileToken, ip);
   if (!turnstileOk) {
     return context.json({ error: "turnstile_failed", message: "CAPTCHA bot verification failed. Please try again." }, 400);
   }
@@ -627,19 +652,20 @@ app.post("/recover", async (context) => {
   const newPasswordHash = await hashPassword(body.newPassword);
   const newRawKey = generateRecoveryKey();
   const newRecoveryHash = await sha256(`sb_rec_${normalizeKey(newRawKey)}`);
-  const sessionToken = crypto.randomUUID() + "-" + crypto.randomUUID();
-  const tokenHash = await sha256(sessionToken);
+  const session = await createSession();
 
   await context.env.DB.prepare(
-    `UPDATE parents SET password_hash = ?, recovery_key_hash = ?, session_token = ? WHERE id = ?`,
-  ).bind(newPasswordHash, newRecoveryHash, tokenHash, parent.id).run();
+    `UPDATE parents SET password_hash = ?, recovery_key_hash = ?, session_token = ?,
+                        session_expires_at = ?, session_last_used_at = ?
+     WHERE id = ?`,
+  ).bind(newPasswordHash, newRecoveryHash, session.tokenHash, session.expiresAt, session.lastUsedAt, parent.id).run();
 
   void sendParentSecurityAlert(context.env, parent.email, "password.recovery_used", {
     ipAddress: ip,
     userAgent,
   });
 
-  return context.json({ token: sessionToken, email: parent.email, newRecoveryKey: newRawKey });
+  return context.json({ token: session.sessionToken, email: parent.email, newRecoveryKey: newRawKey });
 });
 
 app.post("/logout", async (context) => {
@@ -647,9 +673,7 @@ app.post("/logout", async (context) => {
   if (authHeader?.startsWith("Bearer ")) {
     const token = authHeader.slice(7).trim();
     if (token) {
-      const tokenHash = await sha256(token);
-      await context.env.DB.prepare(`UPDATE parents SET session_token = NULL WHERE session_token = ?`)
-        .bind(tokenHash).run();
+      await clearSession(context.env.DB, await sha256(token));
     }
   }
   return context.json({ ok: true });
