@@ -1,4 +1,22 @@
 <Project Sdk="Microsoft.NET.Sdk">
-  <PropertyGroup><OutputType>Exe</OutputType><PublishSingleFile>true</PublishSingleFile><SelfContained>true</SelfContained></PropertyGroup>
-  <ItemGroup><PackageReference Include="System.Security.Cryptography.ProtectedData" Version="8.0.0" /></ItemGroup>
+  <PropertyGroup>
+    <OutputType>WinExe</OutputType>
+    <UseWindowsForms>true</UseWindowsForms>
+    <PublishSingleFile>true</PublishSingleFile>
+    <SelfContained>true</SelfContained>
+    <!-- Requests elevation; enrollment writes to ProgramData and restarts the service. -->
+    <ApplicationManifest>app.manifest</ApplicationManifest>
+    <!-- Keeps the dialog crisp on high-DPI laptops instead of bitmap-scaled and blurry. -->
+    <ApplicationHighDpiMode>PerMonitorV2</ApplicationHighDpiMode>
+    <!--
+      WinExe means no console is allocated, so Console.WriteLine/Error from the
+      command-line path is invisible when launched from an existing console. The
+      installer and scripts rely on the exit code, and the GUI path reports through
+      dialogs, so this is acceptable; revisit if scripted output is ever needed.
+    -->
+  </PropertyGroup>
+  <ItemGroup>
+    <PackageReference Include="System.Security.Cryptography.ProtectedData" Version="8.0.0" />
+    <PackageReference Include="System.ServiceProcess.ServiceController" Version="8.0.1" />
+  </ItemGroup>
 </Project>
