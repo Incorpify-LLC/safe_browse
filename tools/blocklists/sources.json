@@ -1,13 +1,15 @@
 {
-  "transformationVersion": "1",
+  "transformationVersion": "2",
   "sources": [
-    { "category": "threats", "name": "HaGeZi TIF Mini", "url": "https://raw.githubusercontent.com/hagezi/dns-blocklists/main/wildcard/tif.mini-onlydomains.txt", "license": "GPL-3.0-only", "minimumEntries": 10000, "maximumEntries": 1000000 },
-    { "category": "adult", "name": "HaGeZi NSFW", "url": "https://raw.githubusercontent.com/hagezi/dns-blocklists/main/wildcard/nsfw-onlydomains.txt", "license": "GPL-3.0-only", "minimumEntries": 10000, "maximumEntries": 1000000 },
-    { "category": "gambling", "name": "HaGeZi Gambling Mini", "url": "https://raw.githubusercontent.com/hagezi/dns-blocklists/main/wildcard/gambling.mini-onlydomains.txt", "license": "GPL-3.0-only", "minimumEntries": 1000, "maximumEntries": 500000 },
+    { "category": "threats", "name": "Block List Project Phishing", "url": "https://raw.githubusercontent.com/blocklistproject/Lists/master/alt-version/phishing-nl.txt", "license": "Unlicense", "minimumEntries": 1000, "maximumEntries": 800000 },
+    { "category": "threats", "name": "Block List Project Ransomware", "url": "https://raw.githubusercontent.com/blocklistproject/Lists/master/alt-version/ransomware-nl.txt", "license": "Unlicense", "minimumEntries": 1, "maximumEntries": 100000 },
+    { "category": "threats", "name": "Block List Project Scam", "url": "https://raw.githubusercontent.com/blocklistproject/Lists/master/alt-version/scam-nl.txt", "license": "Unlicense", "minimumEntries": 1, "maximumEntries": 100000 },
+    { "category": "adult", "name": "StevenBlack porn hosts", "url": "https://raw.githubusercontent.com/StevenBlack/hosts/master/alternates/porn/hosts", "license": "MIT", "minimumEntries": 10000, "maximumEntries": 500000 },
+    { "category": "gambling", "name": "Block List Project Gambling", "url": "https://raw.githubusercontent.com/blocklistproject/Lists/master/alt-version/gambling-nl.txt", "license": "Unlicense", "minimumEntries": 1000, "maximumEntries": 500000 },
     { "category": "drugs", "name": "Block List Project Drugs", "url": "https://raw.githubusercontent.com/blocklistproject/Lists/master/alt-version/drugs-nl.txt", "license": "Unlicense", "minimumEntries": 1000, "maximumEntries": 500000 },
-    { "category": "piracy", "name": "HaGeZi Anti Piracy", "url": "https://raw.githubusercontent.com/hagezi/dns-blocklists/main/wildcard/anti.piracy-onlydomains.txt", "license": "GPL-3.0-only", "minimumEntries": 1000, "maximumEntries": 1000000 },
-    { "category": "bypass", "name": "HaGeZi Bypass", "url": "https://raw.githubusercontent.com/hagezi/dns-blocklists/main/wildcard/doh-vpn-proxy-bypass-onlydomains.txt", "license": "GPL-3.0-only", "minimumEntries": 1000, "maximumEntries": 500000 },
-    { "category": "social", "name": "HaGeZi Social", "url": "https://raw.githubusercontent.com/hagezi/dns-blocklists/main/wildcard/social-onlydomains.txt", "license": "GPL-3.0-only", "minimumEntries": 100, "maximumEntries": 100000 },
+    { "category": "piracy", "name": "Block List Project Piracy", "url": "https://raw.githubusercontent.com/blocklistproject/Lists/master/alt-version/piracy-nl.txt", "license": "Unlicense", "minimumEntries": 500, "maximumEntries": 500000 },
+    { "category": "bypass", "name": "dibdot DoH-IP-blocklists", "url": "https://raw.githubusercontent.com/dibdot/DoH-IP-blocklists/master/doh-domains_overall.txt", "license": "GPL-3.0-only", "minimumEntries": 500, "maximumEntries": 100000 },
+    { "category": "social", "name": "Safe Browse curated social", "path": "data/social.txt", "license": "Apache-2.0", "minimumEntries": 1, "maximumEntries": 100000 },
     { "category": "anime", "name": "Safe Browse curated anime", "path": "data/anime.txt", "license": "Apache-2.0", "minimumEntries": 1, "maximumEntries": 100000 },
     { "category": "gaming", "name": "Safe Browse curated gaming", "path": "data/gaming.txt", "license": "Apache-2.0", "minimumEntries": 1, "maximumEntries": 100000 },
     { "category": "streaming", "name": "Safe Browse curated streaming", "path": "data/streaming.txt", "license": "Apache-2.0", "minimumEntries": 1, "maximumEntries": 100000 }

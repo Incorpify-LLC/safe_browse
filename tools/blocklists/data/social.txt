@@ -1,0 +1,39 @@
+# Safe Browse curated social category
+# Format: one domain per line. Add provenance in social-provenance.csv.
+#
+# Curated rather than fed from upstream: the maintained general-purpose social
+# blocklist this category used (HaGeZi Social) no longer exists, and the remaining
+# public options are either unlicensed or bundle unrelated categories. A short,
+# reviewed list of the platforms parents actually ask about is more predictable
+# than a large third-party feed, and false positives here are highly visible.
+#
+# Content delivery domains are included where blocking the apex alone still leaves
+# the app or site usable.
+facebook.com
+fb.com
+fbcdn.net
+messenger.com
+instagram.com
+cdninstagram.com
+twitter.com
+x.com
+t.co
+twimg.com
+tiktok.com
+tiktokcdn.com
+tiktokv.com
+snapchat.com
+sc-cdn.net
+reddit.com
+redd.it
+redditstatic.com
+redditmedia.com
+tumblr.com
+pinterest.com
+pinimg.com
+discord.com
+discordapp.com
+discordapp.net
+threads.net
+vk.com
+weibo.com

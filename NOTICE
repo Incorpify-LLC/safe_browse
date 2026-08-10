@@ -1,7 +1,12 @@
 Safe Browse
 Copyright 2026 Incorpify LLC
 
-Generated runtime blocklist artifacts may contain data derived from HaGeZi DNS
-Blocklists (GPL-3.0-only) and Block List Project Lists (Unlicense). Artifact
-manifests identify each source, license, and transformation version. These data
-artifacts are distributed separately from the Apache-2.0 application code.
+Generated runtime blocklist artifacts may contain data derived from Block List
+Project Lists (Unlicense), StevenBlack/hosts (MIT), and dibdot DoH-IP-blocklists
+(GPL-3.0-only). Artifact manifests identify each source, license, and
+transformation version. These data artifacts are distributed separately from the
+Apache-2.0 application code.
+
+HaGeZi DNS Blocklists (GPL-3.0-only) were used until August 2026, when the
+upstream repository ceased to be available. No HaGeZi-derived data remains in
+artifacts produced at transformation version 2 or later.

@@ -8,6 +8,12 @@
         <Component Id="ServiceFiles" Guid="*">
           <File Id="ServiceExe" Source="..\artifacts\service\SafeBrowse.Service.exe" KeyPath="yes" />
           <File Source="..\artifacts\service\appsettings.json" />
+          <!--
+            ES256 public key for verifying the signed blocklist manifest. appsettings.json
+            points ManifestPublicKeyPath at this exact path, and ListArtifactStore reads it
+            before installing any list. Without it on disk, list sync cannot succeed.
+          -->
+          <File Id="BlocklistPublicKey" Name="blocklist-public-key.pem" Source="blocklist-public-key.pem" />
           <ServiceInstall Id="SafeBrowseServiceInstall" Name="Safe Browse Protection" DisplayName="Safe Browse Protection" Description="Local parental-control DNS filtering" Start="auto" Type="ownProcess" ErrorControl="normal" Account="LocalSystem" />
           <ServiceControl Id="SafeBrowseServiceControl" Name="Safe Browse Protection" Start="install" Stop="both" Remove="uninstall" Wait="yes" />
         </Component>

@@ -41,7 +41,24 @@ public sealed class ProtectionWorker(AgentState state, PolicyStore policies, Lis
                 var envelope = await sync.Content.ReadFromJsonAsync<PolicyEnvelope>(cancellationToken: token);
                 if (envelope?.Policy is not null)
                 {
-                    if (envelope.Policy.ListVersion != "bootstrap") await artifacts.SyncAsync(client, envelope.Policy.ListVersion, token);
+                    if (envelope.Policy.ListVersion != "bootstrap")
+                    {
+                        try
+                        {
+                            await artifacts.SyncAsync(client, envelope.Policy.ListVersion, token);
+                        }
+                        catch (Exception listException) when (listException is not OperationCanceledException)
+                        {
+                            // Blocklist problems must never cost us the device. A missing public
+                            // key, a bad signature, or a hash mismatch used to escape SyncOnce
+                            // entirely — the catch below only filters HTTP and cancellation — and
+                            // so terminated the RunSync loop for good, taking policy updates,
+                            // event upload, and heartbeats with it. The device kept filtering on
+                            // its cached policy while the console silently lost control of it.
+                            // Keep the last known-good lists and carry on.
+                            logger.LogError(listException, "Blocklist sync failed for version {Version}; continuing with cached lists", envelope.Policy.ListVersion);
+                        }
+                    }
                     policies.Save(envelope.Policy); state.Update(envelope.Policy, policies.LoadLists());
                 }
             }
@@ -51,6 +68,10 @@ public sealed class ProtectionWorker(AgentState state, PolicyStore policies, Lis
             await client.PostAsJsonAsync("heartbeat", new { agentVersion = _options.AgentVersion, policyVersion = policy?.Version ?? 0, listVersion = policy?.ListVersion ?? "", status = "healthy", detail = (string?)null }, token);
         }
         catch (Exception exception) when (exception is HttpRequestException or TaskCanceledException) { logger.LogWarning(exception, "Cloud sync failed; cached protection remains active"); }
+        // Backstop: any other fault must not escape and end RunSync's loop, which would
+        // leave the agent filtering on a frozen policy with no way to be corrected.
+        // Cancellation still propagates so shutdown stays clean.
+        catch (Exception exception) when (exception is not OperationCanceledException) { logger.LogError(exception, "Unexpected sync failure; cached protection remains active"); }
     }
     private async Task UploadAccessRequests(HttpClient client, CancellationToken token)
     {

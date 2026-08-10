@@ -1,0 +1,29 @@
+domain,source,reviewed_at,note
+facebook.com,manual,2026-08-10,Facebook apex
+fb.com,manual,2026-08-10,Facebook short domain and redirects
+fbcdn.net,manual,2026-08-10,Facebook and Instagram content delivery
+messenger.com,manual,2026-08-10,Facebook Messenger
+instagram.com,manual,2026-08-10,Instagram apex
+cdninstagram.com,manual,2026-08-10,Instagram content delivery
+twitter.com,manual,2026-08-10,Legacy Twitter apex, still redirects
+x.com,manual,2026-08-10,X apex
+t.co,manual,2026-08-10,X link shortener
+twimg.com,manual,2026-08-10,X content delivery
+tiktok.com,manual,2026-08-10,TikTok apex
+tiktokcdn.com,manual,2026-08-10,TikTok content delivery
+tiktokv.com,manual,2026-08-10,TikTok API and video domain
+snapchat.com,manual,2026-08-10,Snapchat apex
+sc-cdn.net,manual,2026-08-10,Snapchat content delivery
+reddit.com,manual,2026-08-10,Reddit apex
+redd.it,manual,2026-08-10,Reddit short links and media
+redditstatic.com,manual,2026-08-10,Reddit static assets
+redditmedia.com,manual,2026-08-10,Reddit hosted media
+tumblr.com,manual,2026-08-10,Tumblr apex
+pinterest.com,manual,2026-08-10,Pinterest apex
+pinimg.com,manual,2026-08-10,Pinterest content delivery
+discord.com,manual,2026-08-10,Discord apex
+discordapp.com,manual,2026-08-10,Discord legacy apex still in use by clients
+discordapp.net,manual,2026-08-10,Discord media and attachments
+threads.net,manual,2026-08-10,Threads apex
+vk.com,manual,2026-08-10,VK apex
+weibo.com,manual,2026-08-10,Weibo apex

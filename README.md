@@ -17,86 +17,109 @@ Transparent parental controls for **Windows 10 / Windows 11**. Filtering runs lo
 
 ---
 
-## Install on a child’s Windows PC (no Git)
+## Install on a child’s Windows PC (verified)
 
-**Child machines do not need Git, a repo clone, or Node.**  
-Installation is a single elevated PowerShell command that downloads the MSI, installs it, writes the production API URL, hardens DNS, and can enroll in one shot.
+**Child machines do not need Git, a repo clone, or Node.**
 
-### Recommended: one-shot installer
+These steps were run end-to-end on the lab VM (`win11-vm`, Windows 11) against production.
 
-**PowerShell → Run as administrator**
+### Parent first
+
+1. Open **https://safebrowse.incorpify.in** → Sign up / Log in  
+2. **Add a child** → set categories  
+3. **Generate setup code** (format `ABCD-EFGH-JKMN`)  
+4. Codes are **single-use** and valid for **24 hours** (you can generate a new one any time)
+
+### Child PC — recommended (elevated PowerShell, one script)
+
+On the child PC: **Start → PowerShell → Run as administrator**, then paste **exactly** (two lines):
 
 ```powershell
-# Install + configure production API + harden DNS
+$env:SAFE_BROWSE_ENROLL = 'PASTE-YOUR-CODE-HERE'
 irm https://pub-2c62cb4c92de4a818a9abc3ff05b4526.r2.dev/releases/latest/Install.ps1 | iex
 ```
 
-**With enrollment code** from the parent console (e.g. `AB3K-M9NP-Q2VX`):
+That script (in order):
+
+1. Downloads **SafeBrowseSetup.msi** (~143 MB) from Cloudflare R2  
+2. Quiet-installs it (`msiexec /qn` — **no installer wizard UI**)  
+3. Writes production **ApiBaseUrl** into `appsettings.json`  
+4. Starts **Safe Browse Protection**  
+5. **Enrolls** with your code (needs working internet)  
+6. Hardens DNS last; if the local filter does not answer, it **restores public DNS** so the PC is not left offline  
+
+**Do not** use the old nested form `iex "& { $(irm $u) } -EnrollCode ..."` — it is easy to paste wrong and fails when `$u` is empty.
+
+### More reliable PowerShell (if `| iex` is blocked)
 
 ```powershell
-$u = 'https://pub-2c62cb4c92de4a818a9abc3ff05b4526.r2.dev/releases/latest/Install.ps1'
-iex "& { $(irm $u) } -EnrollCode 'AB3K-M9NP-Q2VX'"
+irm https://pub-2c62cb4c92de4a818a9abc3ff05b4526.r2.dev/releases/latest/Install.ps1 -OutFile $env:TEMP\sb-install.ps1
+powershell -ExecutionPolicy Bypass -File $env:TEMP\sb-install.ps1 -EnrollCode 'PASTE-YOUR-CODE-HERE'
 ```
 
-What that does:
+### MSI double-click (no PowerShell for install)
 
-1. Downloads **SafeBrowseSetup.msi** from Cloudflare R2  
-2. Quiet-installs the agent service  
-3. Sets **ApiBaseUrl** → `https://safebrowse.incorpify.in/api/v1/device/`  
-4. Hardens network (system DNS → `127.0.0.1`, block direct DNS, disable browser DoH)  
-5. Optionally enrolls with the parent code and restarts the service  
+| | |
+| :--- | :--- |
+| **Latest MSI** | [Download SafeBrowseSetup.msi](https://pub-2c62cb4c92de4a818a9abc3ff05b4526.r2.dev/releases/latest/SafeBrowseSetup.msi) |
+| **SHA-256 (0.1.0)** | `93fb439ea9daa620637bdfea643f143ad7c0708bd70c02afaebd518638388abb` |
 
-**No Git. No clone. No multi-step script hunting.**
+- Double-click the MSI. Current package has **no custom wizard** (SmartScreen may warn; choose Run anyway / More info).  
+- Then **enroll in elevated PowerShell** (current `Enroll.exe` needs **two** arguments — API URL and code):
 
-Full notes: [docs/child_install_one_liner.md](docs/child_install_one_liner.md)
+```powershell
+& "C:\Program Files\Safe Browse\SafeBrowse.Enroll.exe" "https://safebrowse.incorpify.in/api/v1/device" "PASTE-YOUR-CODE-HERE"
+Restart-Service "Safe Browse Protection" -Force
+```
 
-### Parent side (before the child install)
+Passing only the code crashes the current MSI binary (`IndexOutOfRangeException`). Always pass the API URL first.
 
-1. Open **https://safebrowse.incorpify.in** → Sign up / Log in  
-2. Add a child → set categories → **Generate setup code**  
-3. On the child PC, run the one-liner with that code  
+Optional harden after enroll (can break internet if the local filter fails — prefer the full `Install.ps1` which rolls back):
+
+```powershell
+irm https://pub-2c62cb4c92de4a818a9abc3ff05b4526.r2.dev/releases/latest/configure-protection.ps1 -OutFile $env:TEMP\sb-harden.ps1
+powershell -ExecutionPolicy Bypass -File $env:TEMP\sb-harden.ps1 -Action Install
+Restart-Service "Safe Browse Protection" -Force
+```
 
 ### Quick check on the child PC
 
 ```powershell
 Get-Service "Safe Browse Protection"
+Test-Path "C:\ProgramData\SafeBrowse\device.credential"
+Test-Path "C:\ProgramData\SafeBrowse\policy.json"
 nslookup example.com 127.0.0.1
 ```
 
-### Alternative: MSI only
+Expected: service **Running**, both files **True**. `nslookup` via `127.0.0.1` works only if DNS was hardened **and** the filter is healthy.
 
-| | |
+### If the child PC has “no internet” after install
+
+Hardening points DNS at `127.0.0.1` and blocks direct DNS. If the filter is not resolving, the PC looks offline. **Elevated PowerShell:**
+
+```powershell
+foreach ($n in @(
+  'Safe Browse - Allow Service DNS UDP','Safe Browse - Allow Service DNS TCP',
+  'Safe Browse - Block direct DNS UDP','Safe Browse - Block direct DNS TCP'
+)) { Remove-NetFirewallRule -DisplayName $n -ErrorAction SilentlyContinue }
+
+Get-NetAdapter | Where-Object Status -eq 'Up' | ForEach-Object {
+  Set-DnsClientServerAddress -InterfaceIndex $_.ifIndex -ServerAddresses 1.1.1.1,8.8.8.8
+}
+Clear-DnsClientCache
+```
+
+SSH/RDP by **IP** still works when DNS is broken.
+
+### Helper files on R2
+
+| File | Role |
 | :--- | :--- |
-| **Latest MSI** | [Download SafeBrowseSetup.msi](https://pub-2c62cb4c92de4a818a9abc3ff05b4526.r2.dev/releases/latest/SafeBrowseSetup.msi) |
-| **Versioned (0.1.0)** | [SafeBrowseSetup.msi (0.1.0)](https://pub-2c62cb4c92de4a818a9abc3ff05b4526.r2.dev/releases/0.1.0/SafeBrowseSetup.msi) |
-| **Manifest** | [latest.json](https://pub-2c62cb4c92de4a818a9abc3ff05b4526.r2.dev/releases/latest.json) |
-| **SHA-256 (0.1.0)** | `93fb439ea9daa620637bdfea643f143ad7c0708bd70c02afaebd518638388abb` |
+| [Install.ps1](https://pub-2c62cb4c92de4a818a9abc3ff05b4526.r2.dev/releases/latest/Install.ps1) | Preferred full install (API + enroll + safe harden) |
+| [SafeBrowseSetup.msi](https://pub-2c62cb4c92de4a818a9abc3ff05b4526.r2.dev/releases/latest/SafeBrowseSetup.msi) | Package only |
+| [configure-protection.ps1](https://pub-2c62cb4c92de4a818a9abc3ff05b4526.r2.dev/releases/latest/configure-protection.ps1) | Harden / unharden |
 
-Double-click the MSI for a basic install, then still run the **Install.ps1** one-liner so API URL + DNS hardening are applied (until the next packaged MSI ships with production defaults fully baked in).
-
-```powershell
-# Optional integrity check
-Get-FileHash .\SafeBrowseSetup.msi -Algorithm SHA256
-```
-
-### After install — enroll only (if you skipped `-EnrollCode`)
-
-```powershell
-& "C:\Program Files\Safe Browse\SafeBrowse.Enroll.exe" "YOUR-CODE"
-Restart-Service "Safe Browse Protection" -Force
-```
-
-(`SafeBrowse.Enroll.exe` defaults to the production API when only a code is passed.)
-
-### Helper / bootstrap scripts on R2
-
-| Script | Role | Link |
-| :--- | :--- | :--- |
-| **Install.ps1** | **One-shot child install (preferred)** | [latest/Install.ps1](https://pub-2c62cb4c92de4a818a9abc3ff05b4526.r2.dev/releases/latest/Install.ps1) |
-| configure-protection.ps1 | DNS harden / unharden only | [latest/configure-protection.ps1](https://pub-2c62cb4c92de4a818a9abc3ff05b4526.r2.dev/releases/latest/configure-protection.ps1) |
-| Uninstall-SafeBrowse.ps1 | Clean uninstall (release folder) | [0.1.0](https://pub-2c62cb4c92de4a818a9abc3ff05b4526.r2.dev/releases/0.1.0/Uninstall-SafeBrowse.ps1) |
-
-> **Developers only:** cloning this repo is for building the cloud or the Windows agent—not for installing on a child’s PC.
+> **Developers only:** cloning this repo is for building cloud/agent code — not for installing on a child’s PC.
 
 ---
 
@@ -105,28 +128,28 @@ Restart-Service "Safe Browse Protection" -Force
 | Component | Path | Role |
 | :--- | :--- | :--- |
 | **Worker API + dashboard** | `apps/worker`, `apps/dashboard` | Parent console, device sync, D1 history, R2 blocklists |
-| **Windows agent** | `apps/windows` | Service (DNS proxy), native messaging host, enroll, tray, WiX MSI |
-| **One-shot bootstrap** | `apps/windows/releases/bootstrap/Install.ps1` | Child PC install from R2 (no Git) |
-| **Browser extension** | `apps/extension` | Top-level hostname telemetry (optional; DNS still enforces) |
+| **Windows agent** | `apps/windows` | Service (DNS proxy), native host, enroll, tray, WiX MSI |
+| **One-shot bootstrap** | `apps/windows/releases/bootstrap/Install.ps1` | Verified child install from R2 |
+| **Browser extension** | `apps/extension` | Top-level hostname telemetry (optional) |
 | **Contracts** | `packages/contracts` | Shared TypeScript policy/API schemas |
 | **Blocklist tools** | `tools/blocklists` | Deterministic feed compile + signed manifests |
 
 ---
 
-## Self-host (advanced — parents who want their own Cloudflare)
+## Self-host (advanced)
 
 ```bash
 git clone https://github.com/Incorpify-LLC/safe_browse.git
 cd safe_browse
-# Create a token: docs/cloudflare-api-token.md
 bash tools/deploy.sh
 ```
 
-Then point child installs at your Worker:
+Point child installs at your Worker:
 
 ```powershell
-$u = 'https://pub-2c62cb4c92de4a818a9abc3ff05b4526.r2.dev/releases/latest/Install.ps1'
-iex "& { $(irm $u) } -ApiBaseUrl 'https://YOUR-WORKER.workers.dev/api/v1/device/' -EnrollCode 'CODE'"
+$env:SAFE_BROWSE_API = 'https://YOUR-WORKER.workers.dev/api/v1/device/'
+$env:SAFE_BROWSE_ENROLL = 'CODE'
+irm https://pub-2c62cb4c92de4a818a9abc3ff05b4526.r2.dev/releases/latest/Install.ps1 | iex
 ```
 
 Details: [docs/deployment.md](docs/deployment.md) · [docs/parent-auth.md](docs/parent-auth.md) · [docs/saas-multitenant-plan.md](docs/saas-multitenant-plan.md)
@@ -142,32 +165,22 @@ npm run dev --workspace @safe-browse/worker
 npm run dev --workspace @safe-browse/dashboard
 ```
 
-Apply local D1 migrations:
-
 ```bash
 npx wrangler d1 migrations apply safe-browse --local --config apps/worker/wrangler.jsonc
 ```
-
-`Cf-Access-Authenticated-User-Email` is accepted only when `ENVIRONMENT=development`. Production expects a verified Cloudflare Access JWT only if you enable Access (`ACCESS_TEAM_DOMAIN` / `ACCESS_AUD`).
 
 ---
 
 ## Publish a new Windows MSI to R2
 
-On a machine with the built release folder and Wrangler auth:
-
 ```bash
-# Default: apps/windows/releases/0.1.0
 bash tools/upload-windows-release.sh --version 0.1.0
-
-# Also upload the one-shot bootstrap
 npx wrangler r2 object put safe-browse-releases/releases/latest/Install.ps1 \
   --file=apps/windows/releases/bootstrap/Install.ps1 \
   --content-type="text/plain; charset=utf-8" --remote
 ```
 
-Bucket: **`safe-browse-releases`** (public via `r2.dev`).  
-Public base: see `apps/windows/releases/R2_PUBLIC_BASE_URL.txt`.
+Bucket: **`safe-browse-releases`**. Public base: `apps/windows/releases/R2_PUBLIC_BASE_URL.txt`.
 
 ---
 
@@ -175,17 +188,14 @@ Public base: see `apps/windows/releases/R2_PUBLIC_BASE_URL.txt`.
 
 | Doc | Description |
 | :--- | :--- |
-| [docs/child_install_one_liner.md](docs/child_install_one_liner.md) | **Child PC one-shot install (no Git)** |
-| [docs/windows_remote_access_setup.md](docs/windows_remote_access_setup.md) | SSH + install + enroll walkthrough |
+| [docs/child_install_one_liner.md](docs/child_install_one_liner.md) | Child install (verified) |
+| [docs/windows_remote_access_setup.md](docs/windows_remote_access_setup.md) | SSH + install walkthrough |
 | [docs/production.md](docs/production.md) | Live SaaS URLs & redeploy |
-| [docs/deployment.md](docs/deployment.md) | Cloudflare deploy, R2 free tier |
 | [docs/architecture.md](docs/architecture.md) | Trust boundaries & data flow |
-| [docs/parent-auth.md](docs/parent-auth.md) | PIN + TOTP recovery ladder |
-| [docs/saas-multitenant-plan.md](docs/saas-multitenant-plan.md) | Multi-tenant SaaS plan |
-| [docs/test_setup_win11.md](docs/test_setup_win11.md) | Lab Win11 VM + remote test suite |
+| [docs/test_setup_win11.md](docs/test_setup_win11.md) | Lab Win11 VM |
 
 ---
 
 ## License
 
-Application code: **Apache-2.0**. HaGeZi-derived blocklist data remains separately identified **GPL-3.0** where applicable — see blocklist tooling and manifests.
+Application code: **Apache-2.0**. Blocklist data is separately identified per source in each artifact manifest — Block List Project (**Unlicense**), StevenBlack/hosts (**MIT**), dibdot DoH-IP-blocklists (**GPL-3.0**). See [NOTICE](NOTICE).
