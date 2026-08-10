@@ -25,7 +25,7 @@ export function base32Encode(bytes: Uint8Array): string {
   return output;
 }
 
-export function base32Decode(input: string): Uint8Array {
+export function base32Decode(input: string): Uint8Array<ArrayBuffer> {
   const str = input.toUpperCase().replace(/=+$/, "");
   let bits = 0;
   let value = 0;
@@ -50,7 +50,10 @@ export function generateTotpSecret(): string {
   return base32Encode(bytes);
 }
 
-async function hmacSha1(keyBytes: Uint8Array, data: Uint8Array): Promise<Uint8Array> {
+// Parameters are `Uint8Array<ArrayBuffer>` rather than plain `Uint8Array`: since
+// TypeScript 5.7 the array is generic over its backing buffer, and Web Crypto's
+// `BufferSource` excludes `SharedArrayBuffer`-backed views.
+async function hmacSha1(keyBytes: Uint8Array<ArrayBuffer>, data: Uint8Array<ArrayBuffer>): Promise<Uint8Array<ArrayBuffer>> {
   const key = await crypto.subtle.importKey(
     "raw", keyBytes, { name: "HMAC", hash: "SHA-1" }, false, ["sign"],
   );
@@ -58,7 +61,7 @@ async function hmacSha1(keyBytes: Uint8Array, data: Uint8Array): Promise<Uint8Ar
   return new Uint8Array(sig);
 }
 
-function counterToBytes(counter: number): Uint8Array {
+function counterToBytes(counter: number): Uint8Array<ArrayBuffer> {
   // 8-byte big-endian representation of the counter
   const buf = new Uint8Array(8);
   let c = counter;

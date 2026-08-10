@@ -1,7 +1,7 @@
 import { Hono, type Context } from "hono";
 import { z } from "zod";
 import { ageBandSchema, categories, categorySchema, domainRuleSchema, normalizeDomain, presetCategories, scheduleSchema } from "@safe-browse/contracts";
-import type { AppBindings, AppVariables } from "../types";
+import { isDevelopment, type AppBindings, type AppVariables } from "../types";
 import { parentAuth } from "../auth";
 import { isResponse, jsonDetail, parseJson } from "../http";
 import { createDefaultCategories, incrementPolicy } from "../policy";
@@ -10,7 +10,7 @@ import { generateEnrollmentCode, normalizeEnrollmentCode, sha256 } from "../cryp
 const app = new Hono<{ Bindings: AppBindings; Variables: AppVariables }>();
 app.use("*", parentAuth);
 app.use("*", async (context, next) => {
-  if (["GET", "HEAD", "OPTIONS"].includes(context.req.method) || context.env.ENVIRONMENT === "development") return next();
+  if (["GET", "HEAD", "OPTIONS"].includes(context.req.method) || isDevelopment(context.env)) return next();
   const origin = context.req.header("Origin");
   if (!origin || !isSameOrigin(origin, context.req.url)) return context.json({ error: "cross_site_request_rejected" }, 403);
   await next();
@@ -117,7 +117,9 @@ app.post("/children/:id/enrollment-code", async (context) => {
   const code = generateEnrollmentCode();
   const codeHash = await sha256(normalizeEnrollmentCode(code));
   const now = new Date();
-  const expiresAt = new Date(now.getTime() + 600_000).toISOString();
+  // Parent may type the code hours later on a child PC; 24h is still single-use + high-entropy.
+  const ENROLL_CODE_TTL_MS = 24 * 60 * 60 * 1000;
+  const expiresAt = new Date(now.getTime() + ENROLL_CODE_TTL_MS).toISOString();
   await context.env.DB.prepare(
     "INSERT INTO enrollment_codes(id,child_id,code_hash,expires_at,created_at) VALUES(?,?,?,?,?)",
   ).bind(crypto.randomUUID(), childId, codeHash, expiresAt, now.toISOString()).run();

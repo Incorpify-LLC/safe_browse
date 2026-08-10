@@ -1,6 +1,6 @@
 import { createRemoteJWKSet, jwtVerify } from "jose";
 import type { Context, Next } from "hono";
-import type { AppBindings, AppVariables } from "./types";
+import { isDevelopment, type AppBindings, type AppVariables } from "./types";
 import { sha256 } from "./crypto";
 
 export async function parentAuth(context: Context<{ Bindings: AppBindings; Variables: AppVariables }>, next: Next) {
@@ -45,7 +45,7 @@ export async function parentAuth(context: Context<{ Bindings: AppBindings; Varia
 
   // 3. Fallback for Local Dev (only on local dev server 127.0.0.1/localhost)
   const host = context.req.header("Host") ?? "";
-  if (!parent && env.ENVIRONMENT === "development" && (host.includes("localhost") || host.includes("127.0.0.1"))) {
+  if (!parent && isDevelopment(env) && (host.includes("localhost") || host.includes("127.0.0.1"))) {
     const devEmail = context.req.header("Cf-Access-Authenticated-User-Email") ?? "developer@example.test";
     parent = await ensureParent(env.DB, devEmail.toLowerCase());
   }

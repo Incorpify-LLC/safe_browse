@@ -21,15 +21,20 @@ describe("multi-tenant isolation", () => {
   let enrollCode = "";
   let deviceToken = "";
 
+  // Deliberately narrower than `RequestInit`: the DOM and Workers definitions
+  // disagree on `BodyInit`, and spreading one into the other trips
+  // exactOptionalPropertyTypes. These four fields are all the tests use.
   async function j(
     path: string,
-    init?: RequestInit & { token?: string },
+    init?: { method?: string; body?: string; headers?: Record<string, string>; token?: string },
   ): Promise<{ status: number; body: Record<string, unknown> }> {
     const headers = new Headers(init?.headers);
     if (!headers.has("Content-Type") && init?.body) headers.set("Content-Type", "application/json");
     if (init?.token) headers.set("Authorization", `Bearer ${init.token}`);
     // Same-origin CSRF bypass not needed: ENVIRONMENT=development
-    const res = await worker.fetch(`${origin}${path}`, { ...init, headers });
+    // `unstable_dev`'s fetch types its init against the Workers `RequestInit`, whose
+    // `HeadersInit` does not accept a DOM `Headers` instance — pass a plain record.
+    const res = await worker.fetch(`${origin}${path}`, { ...init, headers: Object.fromEntries(headers) });
     const text = await res.text();
     let body: Record<string, unknown> = {};
     try {
