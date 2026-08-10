@@ -1,23 +1,22 @@
-function parseFrom(value: string): string | { email: string; name: string } {
+/** Split a `Name <addr@host>` string into the binding's EmailAddress shape. */
+export function parseFrom(value: string): string | { email: string; name: string } {
   const match = /^(.*?)\s*<([^>]+)>$/.exec(value);
   if (!match) return value;
   return { email: match[2] ?? value, name: (match[1] ?? "").trim() };
 }
 
 /**
- * The `EMAIL` send binding is not declared in wrangler.jsonc, so it is undefined
- * in production. Both callers run inside `waitUntil(...).catch(...)`, which means
- * an unguarded `env.EMAIL.send()` throws into a swallowed promise and the parent
- * is never told anything went wrong. Log explicitly instead of failing silently.
- *
- * Returns true when the message was handed to a transport.
+ * Both callers run inside `waitUntil(...).catch(...)`, so anything thrown here
+ * disappears into a swallowed promise and the parent is simply never notified.
+ * A self-host deploy can legitimately omit the `send_email` binding, so check for
+ * it and say so in the logs rather than throwing into the void.
  */
 function emailConfigured(env: Env, purpose: string): boolean {
   if (env.EMAIL) return true;
   console.error(JSON.stringify({
     message: "email_not_configured",
     purpose,
-    detail: "EMAIL binding is absent from wrangler.jsonc; parent notification was dropped.",
+    detail: "No send_email binding; parent notification was dropped.",
   }));
   return false;
 }
@@ -26,7 +25,7 @@ export async function sendAccessRequestEmail(env: Env, to: string, childName: st
   if (!emailConfigured(env, "access_request")) return;
   const safeChild = escapeHtml(childName);
   const safeDomain = escapeHtml(domain);
-  await env.EMAIL!.send({
+  await env.EMAIL.send({
     to,
     from: parseFrom(env.EMAIL_FROM),
     subject: `${childName} requested access to ${domain}`,
@@ -37,7 +36,7 @@ export async function sendAccessRequestEmail(env: Env, to: string, childName: st
 
 export async function sendOfflineEmail(env: Env, to: string, deviceName: string): Promise<void> {
   if (!emailConfigured(env, "device_offline")) return;
-  await env.EMAIL!.send({
+  await env.EMAIL.send({
     to,
     from: parseFrom(env.EMAIL_FROM),
     subject: `Safe Browse cannot reach ${deviceName}`,

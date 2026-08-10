@@ -31,6 +31,13 @@
   "r2_buckets": [
     { "binding": "LISTS", "bucket_name": "safe-browse-lists" }
   ],
+  // Cloudflare Email Sending. incorpify.in is onboarded (`wrangler email sending list`),
+  // which is what lets EMAIL_FROM send to arbitrary parent addresses. Deliberately no
+  // "remote": true — local dev and tests must not proxy to the real service and send
+  // mail to the fixture addresses the integration tests sign up with.
+  "send_email": [
+    { "name": "EMAIL", "allowed_sender_addresses": ["noreply@incorpify.in"] }
+  ],
   "triggers": { "crons": ["*/5 * * * *", "17 2 * * *"] },
   "routes": [
     { "pattern": "safebrowse.incorpify.in", "custom_domain": true }

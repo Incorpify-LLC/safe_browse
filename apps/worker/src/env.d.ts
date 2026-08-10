@@ -22,20 +22,5 @@ interface Env {
   NTFY_TOPIC?: string;
   /** Resend API key — optional parent notification transport. */
   RESEND_API_KEY?: string;
-  /**
-   * Cloudflare Email Routing send binding. Not currently declared in
-   * wrangler.jsonc, so this is `undefined` in production — every use must guard.
-   */
-  EMAIL?: SendEmail;
 }
 
-/**
- * `EmailMessage` is a Workers runtime global that the generated types expose as a
- * type but not as a value. Declared here as a constructor so the (guarded) send
- * path in alerts.ts type-checks; the `typeof EmailMessage !== "undefined"` check
- * at the call site still handles runtimes that do not provide it, such as
- * local Miniflare.
- */
-declare const EmailMessage: {
-  new (from: string, to: string, raw: string): EmailMessage;
-};

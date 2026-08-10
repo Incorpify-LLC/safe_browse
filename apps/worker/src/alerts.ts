@@ -1,4 +1,5 @@
 import type { AppBindings } from "./types";
+import { parseFrom } from "./email";
 
 export type SecurityEventType =
   | "password.created"
@@ -113,29 +114,19 @@ export async function sendParentSecurityAlert(
       if (res.ok) sent = true;
     }
 
-    // 4. Send via Cloudflare Native Email Binding (Requires custom domain Email Routing)
-    // EmailMessage is a Workers runtime global — skip in local Miniflare if missing.
-    if (
-      env.EMAIL &&
-      parentEmail &&
-      !parentEmail.endsWith("@family.local") &&
-      typeof EmailMessage !== "undefined"
-    ) {
-      const mime = [
-        `From: ${env.EMAIL_FROM || "Safe Browse Alerts <alerts@safebrowse.family>"}`,
-        `To: ${parentEmail}`,
-        `Subject: ${subject}`,
-        "Content-Type: text/html; charset=utf-8",
-        "",
-        bodyHtml,
-      ].join("\r\n");
-
-      const emailMessage = new EmailMessage(
-        env.EMAIL_FROM || "alerts@safebrowse.family",
-        parentEmail,
-        mime,
-      );
-      await env.EMAIL.send(emailMessage);
+    // 4. Send via the Cloudflare Email Sending binding. This is the transport that
+    // actually works for arbitrary parent addresses: incorpify.in is onboarded for
+    // Email Sending, so `from` may be any address on it and `to` is unrestricted.
+    // (The older raw-MIME EmailMessage API this used to build is the Email Routing
+    // style, which only forwards to addresses verified in the account.)
+    if (env.EMAIL && parentEmail && !parentEmail.endsWith("@family.local")) {
+      await env.EMAIL.send({
+        to: parentEmail,
+        from: parseFrom(env.EMAIL_FROM || "Safe Browse Alerts <noreply@incorpify.in>"),
+        subject,
+        html: bodyHtml,
+        text: bodyText,
+      });
       sent = true;
     }
   } catch (err) {
