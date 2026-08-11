@@ -26,7 +26,26 @@
           <RegistryValue Root="HKLM" Key="SOFTWARE\Mozilla\NativeMessagingHosts\com.incorpify.safebrowse" Type="string" Value="[#FirefoxManifest]" />
         </Component>
         <Component Id="EnrollComponent" Guid="*">
-          <File Id="EnrollExe" Source="..\artifacts\enroll\SafeBrowse.Enroll.exe" KeyPath="yes" />
+          <!--
+            The Start Menu shortcut is nested inside the File it points at, rather than
+            living in its own component. A separate component tripped four ICE checks:
+            its target was in another component (ICE69), and giving a component rooted in
+            the profile-scoped menu directory an HKLM keypath mixed per-user and
+            per-machine data (ICE38, ICE43, ICE57). Nesting keeps the shortcut in a
+            per-machine component whose keypath is the executable itself.
+
+            Enrollment is not a one-time installer step: codes expire before they are
+            typed, devices get revoked, and a PC can be moved to another child. Without
+            this the only way back is an elevated command line.
+          -->
+          <File Id="EnrollExe" Source="..\artifacts\enroll\SafeBrowse.Enroll.exe" KeyPath="yes">
+            <Shortcut Id="EnrollShortcutEntry"
+                      Directory="SafeBrowseMenuFolder"
+                      Name="Link this PC to Safe Browse"
+                      Description="Enter a setup code from the parent console to link this PC to a child profile"
+                      Advertise="no" />
+          </File>
+          <RemoveFolder Id="RemoveSafeBrowseMenuFolder" Directory="SafeBrowseMenuFolder" On="uninstall" />
         </Component>
         <Component Id="TrayComponent" Guid="*">
           <File Id="TrayExe" Source="..\artifacts\tray\SafeBrowse.Tray.exe" KeyPath="yes" />
@@ -34,24 +53,9 @@
       </Directory>
     </StandardDirectory>
 
-    <!--
-      Start Menu shortcut to the enrollment dialog. Enrollment is not a one-time
-      installer step: a code can expire before it is typed, a parent can move the PC
-      to a different child, or a device can be revoked and re-enrolled. Without this
-      the only way back is an elevated command line.
-    -->
+    <!-- Target directory for the Start Menu shortcut declared in EnrollComponent. -->
     <StandardDirectory Id="ProgramMenuFolder">
-      <Directory Id="SafeBrowseMenuFolder" Name="Safe Browse">
-        <Component Id="EnrollShortcut" Guid="*">
-          <Shortcut Id="EnrollShortcutEntry"
-                    Name="Link this PC to Safe Browse"
-                    Description="Enter a setup code from the parent console to link this PC to a child profile"
-                    Target="[#EnrollExe]"
-                    WorkingDirectory="INSTALLFOLDER" />
-          <RemoveFolder Id="RemoveSafeBrowseMenuFolder" Directory="SafeBrowseMenuFolder" On="uninstall" />
-          <RegistryValue Root="HKLM" Key="SOFTWARE\Incorpify\SafeBrowse" Name="MenuShortcut" Type="integer" Value="1" KeyPath="yes" />
-        </Component>
-      </Directory>
+      <Directory Id="SafeBrowseMenuFolder" Name="Safe Browse" />
     </StandardDirectory>
 
     <Feature Id="ProductFeature" Title="Safe Browse" Level="1">
@@ -59,7 +63,6 @@
       <ComponentRef Id="NativeHostComponent" />
       <ComponentRef Id="EnrollComponent" />
       <ComponentRef Id="TrayComponent" />
-      <ComponentRef Id="EnrollShortcut" />
     </Feature>
 
     <!-- ── Wizard UI ──────────────────────────────────────────────────────────── -->

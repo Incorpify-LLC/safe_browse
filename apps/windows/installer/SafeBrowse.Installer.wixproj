@@ -1,5 +1,19 @@
 <Project Sdk="WixToolset.Sdk/5.0.2">
-  <PropertyGroup><OutputName>SafeBrowseSetup</OutputName><Platform>x64</Platform></PropertyGroup>
+  <PropertyGroup>
+    <OutputName>SafeBrowseSetup</OutputName>
+    <Platform>x64</Platform>
+    <!--
+      ICE43 and ICE57 assume a non-advertised Start Menu shortcut is per-user data and
+      demand an HKCU keypath. That heuristic predates per-machine packages like this
+      one: Scope="perMachine" sets ALLUSERS=1, so ProgramMenuFolder resolves to the All
+      Users Start Menu and the shortcut really is per-machine, correctly keyed on the
+      executable it launches. Satisfying the ICEs literally would mean an HKCU keypath,
+      which would install the shortcut for the installing account only — wrong for a PC
+      where the child uses a different, non-admin account.
+      Deliberately narrow: no other ICE checks are suppressed.
+    -->
+    <SuppressIces>ICE43;ICE57</SuppressIces>
+  </PropertyGroup>
   <ItemGroup>
     <!-- WixUI_Minimal (welcome + licence + progress + finish) so a double-click is a
          real wizard rather than a silent install with no feedback. -->
