@@ -9,7 +9,9 @@
     { "category": "drugs", "name": "Block List Project Drugs", "url": "https://raw.githubusercontent.com/blocklistproject/Lists/master/alt-version/drugs-nl.txt", "license": "Unlicense", "minimumEntries": 1000, "maximumEntries": 500000 },
     { "category": "piracy", "name": "Block List Project Piracy", "url": "https://raw.githubusercontent.com/blocklistproject/Lists/master/alt-version/piracy-nl.txt", "license": "Unlicense", "minimumEntries": 500, "maximumEntries": 500000 },
     { "category": "bypass", "name": "dibdot DoH-IP-blocklists", "url": "https://raw.githubusercontent.com/dibdot/DoH-IP-blocklists/master/doh-domains_overall.txt", "license": "GPL-3.0-only", "minimumEntries": 500, "maximumEntries": 100000 },
+    { "category": "bypass", "name": "HaGeZi Encrypted DNS/VPN/TOR/Proxy Bypass (vendored snapshot 2026.0809)", "path": "data/hagezi-bypass-snapshot.txt", "license": "GPL-3.0-only", "minimumEntries": 10000, "maximumEntries": 100000 },
     { "category": "social", "name": "Safe Browse curated social", "path": "data/social.txt", "license": "Apache-2.0", "minimumEntries": 1, "maximumEntries": 100000 },
+    { "category": "social", "name": "HaGeZi Social (vendored snapshot 2026.0805)", "path": "data/hagezi-social-snapshot.txt", "license": "GPL-3.0-only", "minimumEntries": 500, "maximumEntries": 100000 },
     { "category": "anime", "name": "Safe Browse curated anime", "path": "data/anime.txt", "license": "Apache-2.0", "minimumEntries": 1, "maximumEntries": 100000 },
     { "category": "gaming", "name": "Safe Browse curated gaming", "path": "data/gaming.txt", "license": "Apache-2.0", "minimumEntries": 1, "maximumEntries": 100000 },
     { "category": "streaming", "name": "Safe Browse curated streaming", "path": "data/streaming.txt", "license": "Apache-2.0", "minimumEntries": 1, "maximumEntries": 100000 }
