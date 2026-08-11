@@ -109,154 +109,91 @@ You should see `LISTENING` for port **22** (and **3389** if you enabled RDP).
 
 # Part B — Install Safe Browse on this PC
 
-Safe Browse installs as a Windows service named **Safe Browse Protection**. It filters DNS locally (even offline after policies are cached).
+Safe Browse installs as a Windows service named **Safe Browse Protection**.  
+**No Git on the child PC.** Prefer the R2 one-shot script (lab-verified on `win11-vm`).
 
-You need the **installer** on this PC first. Prefer the **Cloudflare R2 download** (no Git required).
-
-### Fast path: download MSI from R2
-
-```powershell
-# Elevated PowerShell optional for download; required for install
-$uri = "https://pub-2c62cb4c92de4a818a9abc3ff05b4526.r2.dev/releases/latest/SafeBrowseSetup.msi"
-$msi = "$env:USERPROFILE\Downloads\SafeBrowseSetup.msi"
-Invoke-WebRequest -Uri $uri -OutFile $msi
-# Optional integrity check:
-# Get-FileHash $msi -Algorithm SHA256
-# Expected 0.1.0: 93fb439ea9daa620637bdfea643f143ad7c0708bd70c02afaebd518638388abb
-```
-
-Manifest (version, SHA-256, script URLs):  
-https://pub-2c62cb4c92de4a818a9abc3ff05b4526.r2.dev/releases/latest.json
-
-### What a full release folder looks like
-
-```
-SafeBrowse-0.1.0-win-x64\          (or apps\windows\releases\0.1.0\)
-  SafeBrowseSetup.msi              ≈ 144 MB
-  Install-SafeBrowse.ps1
-  Uninstall-SafeBrowse.ps1
-  configure-protection.ps1
-  README.md
-  bin\                             (present in full release package)
-```
-
-| How to get the package | Notes |
-| :--- | :--- |
-| **R2 (recommended)** | [Latest MSI](https://pub-2c62cb4c92de4a818a9abc3ff05b4526.r2.dev/releases/latest/SafeBrowseSetup.msi) · [latest.json](https://pub-2c62cb4c92de4a818a9abc3ff05b4526.r2.dev/releases/latest.json) |
-| **GitHub (with LFS)** | `git lfs install` then `git lfs pull` — MSI is large |
-| **Repo path** | `apps/windows/releases/0.1.0/` |
-| **USB / network share** | Copy the whole release folder to the kid’s PC |
+Full notes: [child_install_one_liner.md](./child_install_one_liner.md)
 
 ---
 
-## B1. Recommended: script install + DNS hardening
+## B1. Recommended: one-shot Install.ps1 (R2)
 
-This is the best path for a kid’s PC: installs files, service, native-messaging registry, starts protection, and points system DNS at the local filter.
-
-1. Copy the release folder onto the PC (example: `C:\Users\Public\SafeBrowse-0.1.0-win-x64`).
-2. Open **PowerShell as Administrator**.
-3. Run:
+1. Parent: https://safebrowse.incorpify.in → child → **Generate setup code** (valid **24 hours**, single-use).  
+2. On the kid’s PC, open **PowerShell as Administrator**.  
+3. Paste **exactly** (two lines):
 
 ```powershell
-# Go to the folder that contains Install-SafeBrowse.ps1
-cd C:\Users\Public\SafeBrowse-0.1.0-win-x64
-
-# Allow this session to run the install script
-Set-ExecutionPolicy -Scope Process -ExecutionPolicy Bypass
-
-# Install + harden (DNS → 127.0.0.1, block direct DNS, disable browser DoH)
-.\Install-SafeBrowse.ps1 -Harden
+$env:SAFE_BROWSE_ENROLL = 'PASTE-CODE-FROM-PARENT-CONSOLE'
+irm https://pub-2c62cb4c92de4a818a9abc3ff05b4526.r2.dev/releases/latest/Install.ps1 | iex
 ```
 
-If the layout is only the smaller `apps\windows\releases\0.1.0` folder (MSI + scripts, no `bin\`), either:
+What it does: download MSI → quiet install (no wizard) → set production API → start service → **enroll** → harden DNS (rolls back to public DNS if the local filter fails).
 
-- use the **MSI method (B2)** below, then run hardening, **or**
-- point the script at published binaries:
-
-```powershell
-.\Install-SafeBrowse.ps1 -SourceDir "C:\path\to\bin" -Harden
-```
-
-### Optional: point the agent at your family’s cloud API
-
-If the parent dashboard / Worker is already deployed, set the device API URL at install time:
-
-```powershell
-.\Install-SafeBrowse.ps1 -Harden -ApiBaseUrl "https://YOUR-WORKER.workers.dev/api/v1/device/"
-```
-
-(Replace with your real device API base URL from the parent deploy output.)
+**Do not** use nested `iex "& { $(irm $u) } -EnrollCode ..."` — fragile and easy to paste wrong.
 
 ---
 
-## B2. Alternative: MSI installer (including R2 download)
-
-Simplest path: download MSI → install → harden. **Hardening is a second step.**
+## B2. MSI double-click, then enroll by hand
 
 ```powershell
-# Download latest MSI from Cloudflare R2
+# Download (browser or PowerShell)
 $msi = "$env:USERPROFILE\Downloads\SafeBrowseSetup.msi"
 Invoke-WebRequest `
   -Uri "https://pub-2c62cb4c92de4a818a9abc3ff05b4526.r2.dev/releases/latest/SafeBrowseSetup.msi" `
   -OutFile $msi
-
-# Quiet install (elevated)
-msiexec /i $msi /qn
-
-# Harden DNS (elevated)
-Invoke-WebRequest `
-  -Uri "https://pub-2c62cb4c92de4a818a9abc3ff05b4526.r2.dev/releases/0.1.0/configure-protection.ps1" `
-  -OutFile "$env:TEMP\configure-protection.ps1"
-Set-ExecutionPolicy -Scope Process -ExecutionPolicy Bypass
-& "$env:TEMP\configure-protection.ps1" -Action Install
+# Double-click the MSI, or: msiexec /i $msi /qn
 ```
 
-Or double-click **`SafeBrowseSetup.msi`**, finish the wizard, then run `configure-protection.ps1 -Action Install` elevated.
+From 0.1.1 the MSI **does** have a wizard, and its finish page offers "Link this PC
+to a child profile now", which opens the enrollment dialog. Everything below is
+the command-line alternative; it is not required. Note that a plain MSI install
+does **not** harden DNS — use `Install.ps1` or `configure-protection.ps1` for that.
 
----
-
-## B3. Enroll this device with the parent dashboard
-
-Protection policies come from the parent console. After install:
-
-1. On the **parent phone/PC**, open the Safe Browse dashboard.
-2. Create / select the **child**, then create an **enrollment code** (short-lived, single use — usually about 10 minutes).
-3. On the **kid’s PC** (still elevated PowerShell):
+After install (elevated PowerShell):
 
 ```powershell
-cd "C:\Program Files\Safe Browse"
-
-# Replace CODE with the enrollment code from the dashboard
-# (format like AB3K-M9NP-Q2VX — hyphens optional)
-# Replace API with your device API base (same host as parent deploy)
-.\SafeBrowse.Enroll.exe "https://YOUR-WORKER.workers.dev/api/v1/device/" "CODE"
-
-# Restart the service so it loads credentials + policy
+& "C:\Program Files\Safe Browse\SafeBrowse.Enroll.exe" `
+  "https://safebrowse.incorpify.in/api/v1/device" `
+  "PASTE-CODE-FROM-PARENT-CONSOLE"
 Restart-Service -Name "Safe Browse Protection" -Force
 ```
 
-**Expected:** message like `Enrolled device …`. Service status **Running**.
-
-If you are only testing **local** DNS filtering without cloud enroll yet, you can skip B3 and inject a test policy later from the parent tools (lab/dev only).
+From 0.1.1 a bare code also works (`SafeBrowse.Enroll.exe "CODE"`), and running it
+with no arguments opens a dialog. Earlier builds threw `IndexOutOfRangeException`
+for both. The two-argument form above stays correct and is what you want when
+enrolling against a self-hosted Worker.
 
 ---
 
-## B4. Verify Safe Browse is running
+## B3. Verify
 
 ```powershell
-# Service
 Get-Service -Name "Safe Browse Protection"
-
-# Files
+Test-Path "C:\ProgramData\SafeBrowse\device.credential"
+Test-Path "C:\ProgramData\SafeBrowse\policy.json"
 Get-ChildItem "C:\Program Files\Safe Browse" | Select-Object Name
-
-# DNS proxy listening on loopback
 netstat -ano | findstr ":53 "
-
-# Quick filter check (after enroll or test policy):
-# Unblocked site should resolve; a policy-blocked domain should show Non-existent domain
 nslookup example.com 127.0.0.1
 ```
+
+Expected: service **Running**, credential + policy present. `nslookup` via `127.0.0.1` only if harden applied and the filter is healthy.
+
+---
+
+## B4. Restore internet if harden left the PC offline
+
+```powershell
+foreach ($n in @(
+  'Safe Browse - Allow Service DNS UDP','Safe Browse - Allow Service DNS TCP',
+  'Safe Browse - Block direct DNS UDP','Safe Browse - Block direct DNS TCP'
+)) { Remove-NetFirewallRule -DisplayName $n -ErrorAction SilentlyContinue }
+Get-NetAdapter | Where-Object Status -eq 'Up' | ForEach-Object {
+  Set-DnsClientServerAddress -InterfaceIndex $_.ifIndex -ServerAddresses 1.1.1.1,8.8.8.8
+}
+Clear-DnsClientCache
+```
+
+SSH/RDP by **IP** still works when DNS names fail.
 
 | Check | Expected |
 | :--- | :--- |
@@ -280,7 +217,7 @@ Get-DnsClientServerAddress -AddressFamily IPv4 |
 Use the matching uninstall so DNS is restored:
 
 ```powershell
-cd C:\Users\Public\SafeBrowse-0.1.0-win-x64
+cd C:\Users\Public\SafeBrowse-0.1.1-win-x64
 Set-ExecutionPolicy -Scope Process -ExecutionPolicy Bypass
 .\Uninstall-SafeBrowse.ps1
 ```
@@ -325,7 +262,7 @@ The parent can store credentials in a private local file (for example `.env.wind
 | Microsoft account SSH fails | Prefer a local admin for SSH, or confirm MS password + admin role |
 | `Install-SafeBrowse.ps1` cannot find binaries | Use full release with `bin\`, or pass `-SourceDir`, or use MSI (B2) |
 | MSI missing / tiny file after git clone | Run `git lfs install` and `git lfs pull` (MSI is Git LFS) |
-| Service installed but sites not filtered | Run harden (`-Harden` or `configure-protection.ps1 -Action Install`); enroll device (B3) |
+| Service installed but sites not filtered | Prefer full Install.ps1 (B1); enroll with two args (B2); check `device.credential` |
 | Internet broken after uninstall | `.\configure-protection.ps1 -Action Remove` or `.\Uninstall-SafeBrowse.ps1` |
 | Enrollment code fails | Code expired (≈10 min) or already used — create a new code in the dashboard |
 | Port 53 not listening | `Get-Service 'Safe Browse Protection'`; check Event Viewer → Application for `SafeBrowse.Service` |
@@ -353,7 +290,7 @@ Disable-NetFirewallRule -DisplayGroup 'Remote Desktop'
 
 | Doc | Topic |
 | :--- | :--- |
-| [apps/windows/releases/0.1.0/README.md](../apps/windows/releases/0.1.0/README.md) | Short MSI / script notes for the release folder |
+| [apps/windows/releases/0.1.1/README.md](../apps/windows/releases/0.1.1/README.md) | Short MSI / script notes for the release folder |
 | [deployment.md](./deployment.md) | Parent cloud (Cloudflare Worker) one-click deploy |
 | [parent-auth.md](./parent-auth.md) | Parent PIN + TOTP recovery |
 | [test_setup_win11.md](./test_setup_win11.md) | Lab VM + remote test suite |

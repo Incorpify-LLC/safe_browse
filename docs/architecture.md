@@ -52,10 +52,10 @@ The backend is a lightweight, serverless API built on Cloudflare Workers, Edge D
 - **Parent Routes (`/api/v1/parent/*`)**:
   - Protected by **Cloudflare Access JWT** (verifies issuer, audience, and email).
   - Handles household creation, child profiles, real-time policy updates, time schedules, and approving/rejecting access requests.
-  - Generates 6-digit single-use enrollment codes valid for 10 minutes.
+  - Generates high-entropy single-use enrollment codes (e.g. `ABCD-EFGH-JKMN`) valid for 24 hours.
 - **Device Routes (`/api/v1/device/*`)**:
   - Protected by opaque 256-bit bearer tokens (stored in D1 as SHA-256 hashes).
-  - **`/enroll`**: Exchanges a 6-digit code for a permanent device ID, encrypted token, and initial policy.
+  - **`/enroll`**: Exchanges a setup code for a permanent device ID, encrypted token, and initial policy.
   - **`/sync`**: Devices poll every 60 seconds (`policyVersion` & `listVersion`). Returns `304 Not Modified` if policy has not changed.
   - **`/events`**: Uploads batched domain navigation and block events with idempotency keys.
   - **`/lists/manifest` & `/lists/:version/:file`**: Delivers compressed category blocklists (`.txt.gz`) signed with ES256 private keys.
@@ -107,9 +107,10 @@ To prevent children from bypassing local DNS:
 ## 4. Trust Boundaries & Privacy Boundaries
 
 - **Strict Telemetry Boundary**: The MVP deliberately records only top-level hostnames and blocked DNS attempts. It never collects page paths, query strings, page titles, or page content.
-- **Access Verification**: Parent routes require a Cloudflare Access JWT whose issuer and audience are verified by the Worker.
+- **Access Verification**: Parent routes accept, in order, a session bearer token (email + PIN + mandatory TOTP), then a Cloudflare Access JWT whose issuer and audience are verified by the Worker, and — only on a local dev server — an auto-provisioned developer. The shipped multi-tenant SaaS uses the first; Access remains supported for self-hosters who front the Worker with it.
+- **Session Lifetime**: Parent sessions expire on a 7-day idle window inside a 30-day absolute cap. `parents.session_token` holds one session per parent, so signing in elsewhere revokes the previous one.
 - **Device Credential Hash**: Device routes use opaque 256-bit bearer tokens. D1 stores only SHA-256 token hashes.
-- **Single-Use Enrollment**: Enrollment codes are random, single-use, stored as hashes, and expire after ten minutes.
+- **Single-Use Enrollment**: Enrollment codes are random, single-use, stored as hashes, and expire after 24 hours — long enough that a parent can generate a code and walk to the child's PC before typing it.
 - **Artifact Signing**: R2 blocklist artifacts are delivered through authenticated device routes and verified against a signed ES256 manifest.
 - **Extension Decoupling**: The browser extension provides presentation and navigation telemetry only. Disabling or removing the extension does not bypass DNS enforcement.
 

@@ -13,11 +13,11 @@ This document outlines the setup, architecture, saved image templates, remote de
 | **VM Name** | `win11-vm` |
 | **OS Version** | Windows 11 Pro 24H2 (Build 26100) |
 | **Hostname** | `WIN11-KVM` |
-| **IP Address** | `192.168.2.160` (bridged on `br0`) |
+| **IP Address** | DHCP on `br0` — **do not hardcode.** Was `192.168.2.160`, was `192.168.2.173` on 2026-08-11. Find it with the snippet below. |
 | **Local Admin User** | `********` |
 | **Password** | `************` |
-| **SSH Access** | `ssh <user>@192.168.2.160` (Port 22, OpenSSH Server) |
-| **RDP Access** | `192.168.2.160:3389` (NLA disabled, user authorized) |
+| **SSH Access** | `ssh <user>@<current-ip>` (Port 22, OpenSSH Server) |
+| **RDP Access** | `<current-ip>:3389` (NLA disabled, user authorized) |
 | **SPICE Display** | `spice://localhost:5901` |
 | **Hardware Specs** | 8 vCPUs, 8 GB RAM, 64 GB virtio/SATA qcow2 disk, TPM 2.0 (`swtpm`), OVMF UEFI |
 | **Disk image** | `/home/sanjayu/vm-images/win11.qcow2` |
@@ -25,11 +25,28 @@ This document outlines the setup, architecture, saved image templates, remote de
 | **WSL** | WSL 2.7.11 (default version **2**), kernel `6.18.33.2-microsoft-standard-WSL2` |
 | **WSL distro** | `Ubuntu-26.04` — Ubuntu 26.04 LTS (*Resolute Raccoon*), default user `sanjayu` |
 
+### Finding the VM's current IP
+
+The guest is bridged, not on a libvirt NAT network, so `virsh domifaddr` and
+`virsh net-dhcp-leases` both return nothing. Look it up by MAC instead:
+
+```bash
+MAC=$(virsh dumpxml win11-vm | grep -oP "(?<=mac address=')[^']+")
+ip neigh | grep -i "$MAC"                      # if already in the ARP cache
+
+# not cached? sweep the subnet first, then look again
+for i in $(seq 1 254); do (ping -c1 -W1 192.168.2.$i >/dev/null 2>&1 &); done
+sleep 10 && ip neigh | grep -i "$MAC"
+```
+
 ### Host networking notes
 
 - Host bridge IP: `192.168.2.159/24` on `br0`
 - ICMP ping to the guest may fail (Windows firewall); **SSH is the connectivity check**
 - Manage VM: `virsh list --all`, `virsh start win11-vm`, `virsh shutdown win11-vm`
+- `virsh shutdown` (ACPI) may go unacknowledged. If the guest is still running
+  after a few minutes, shut down from inside instead:
+  `ssh <user>@<ip> 'shutdown /s /t 5'`
 
 ---
 
