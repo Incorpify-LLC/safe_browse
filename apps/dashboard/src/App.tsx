@@ -684,21 +684,28 @@ function ParentAuthScreen({ authStatus, onAuthenticated }: { authStatus: AuthSta
           <p className="eyebrow">Child PC · no Git</p>
           <h2>One elevated PowerShell command.</h2>
           <p>
-            No Git, no clone, no multi-step scripts. Download + install + configure the production API + harden DNS
-            in a single run. Optionally pass the enroll code from this console.
+            Generate a setup code here (valid 24 hours), then on the child’s Windows PC open
+            PowerShell as Administrator and paste the two lines below. No Git, no clone.
           </p>
         </div>
         <div className="install-box">
-          <p className="install-label">Install + harden (Run PowerShell as Administrator)</p>
-          <pre className="install-code">{`irm https://pub-2c62cb4c92de4a818a9abc3ff05b4526.r2.dev/releases/latest/Install.ps1 | iex`}</pre>
-          <p className="install-label">Install + harden + enroll in one shot</p>
-          <pre className="install-code">{`$u='https://pub-2c62cb4c92de4a818a9abc3ff05b4526.r2.dev/releases/latest/Install.ps1'
-iex "& { $(irm $u) } -EnrollCode 'AB3K-M9NP-Q2VX'"`}</pre>
+          <p className="install-label">Elevated PowerShell on the child PC</p>
+          <pre className="install-code">{`$env:SAFE_BROWSE_ENROLL = 'YOUR-CODE-FROM-THIS-CONSOLE'
+irm https://pub-2c62cb4c92de4a818a9abc3ff05b4526.r2.dev/releases/latest/Install.ps1 | iex`}</pre>
           <p className="install-note">
-            Or double-click the{" "}
-            <a href="https://pub-2c62cb4c92de4a818a9abc3ff05b4526.r2.dev/releases/latest/SafeBrowseSetup.msi">MSI</a>
-            {" "}then run the one-liner so API URL + DNS hardening are applied. Future MSI builds will ship with
-            production defaults baked in.
+            Downloads the MSI, quiet-installs, points at production, enrolls with your code, then hardens DNS.
+            If the local filter fails, public DNS is restored so the PC is not left offline.
+          </p>
+          <p className="install-label" style={{ marginTop: "1.25rem" }}>
+            Or download the MSI only
+          </p>
+          <p className="install-note">
+            <a href="https://pub-2c62cb4c92de4a818a9abc3ff05b4526.r2.dev/releases/latest/SafeBrowseSetup.msi">
+              SafeBrowseSetup.msi
+            </a>
+            {" "}— double-click it and the installer walks you through setup, then offers to link this PC to a
+            child profile so you can paste the code straight in. You can also re-open that dialog later from
+            Start menu → Safe Browse. This route does not harden DNS, so prefer the command above.
           </p>
         </div>
       </section>
@@ -709,7 +716,7 @@ iex "& { $(irm $u) } -EnrollCode 'AB3K-M9NP-Q2VX'"`}</pre>
           <h2>Ready when you are.</h2>
           <p>Sign up free, protect a Windows PC in minutes, tighten categories as habits change.</p>
           <div className="landing-mini-links">
-            <a href="#child-install">Child PC one-liner</a>
+            <a href="#child-install">Install on child PC</a>
             <a href="https://github.com/Incorpify-LLC/safe_browse/blob/main/docs/saas-multitenant-plan.md" target="_blank" rel="noreferrer">SaaS architecture</a>
             <a href="https://incorpify.in" target="_blank" rel="noreferrer">incorpify.in</a>
           </div>
@@ -854,7 +861,7 @@ function PolicyDrawer({ policy, onClose, onSaved }: { policy: PolicyView; busy: 
     <h3>Filtered categories</h3><div className="category-grid">{categories.map((category) => <label key={category} className={enabled.has(category) ? "checked" : ""}><input type="checkbox" checked={enabled.has(category)} disabled={category === "threats"} onChange={() => { const next = new Set(enabled); next.has(category) ? next.delete(category) : next.add(category); setEnabled(next); }} /><span>{category}</span></label>)}</div>
     <h3>Domain exceptions</h3><form className="rule-form" onSubmit={async (e) => { e.preventDefault(); await api.addRule(policy.child.id, { domain, action: "allow", expiresAt: null }); setDomain(""); }}><input placeholder="example.com" value={domain} onChange={(e) => setDomain(e.target.value)} required /><button className="secondary">Always allow</button></form>
     <ul className="rules">{policy.rules.map((rule) => <li key={rule.id}><span><b>{rule.domain}</b><small>{rule.action}</small></span><button onClick={() => api.deleteRule(policy.child.id, rule.id)}>Remove</button></li>)}</ul>
-    <h3>Windows enrollment</h3>{code ? <div className="enrollment"><strong style={{ fontSize: 18, letterSpacing: "0.12em" }}>{code}</strong><span>Type this on the PC (hyphens optional). Expires in 10 minutes.</span></div> : <button className="secondary full" onClick={async () => setCode((await api.enrollmentCode(policy.child.id)).code)}>Generate setup code</button>}
+    <h3>Windows enrollment</h3>{code ? <div className="enrollment"><strong style={{ fontSize: 18, letterSpacing: "0.12em" }}>{code}</strong><span>Type this on the PC (hyphens optional). Single-use · valid 24 hours · regenerate anytime.</span></div> : <button className="secondary full" onClick={async () => setCode((await api.enrollmentCode(policy.child.id)).code)}>Generate setup code</button>}
     <button className="primary full save" onClick={save}>Save policy</button>
   </section></div>;
 }
