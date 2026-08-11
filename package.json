@@ -7,7 +7,8 @@
     "build": "npm run build --workspaces --if-present",
     "test": "npm run test --workspaces --if-present",
     "typecheck": "npm run typecheck --workspaces --if-present",
-    "check": "npm run typecheck && npm test && npm run build"
+    "_comment_check": "build runs before test on purpose: the worker's integration test boots Miniflare from wrangler.jsonc, whose assets.directory points at apps/dashboard/dist. On a clean checkout that directory does not exist yet, so test-before-build fails with 'assets directory does not exist'.",
+    "check": "npm run typecheck && npm run build && npm test"
   },
   "engines": { "node": ">=22" }
 }
