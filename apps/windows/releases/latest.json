@@ -1,21 +1,21 @@
 {
   "name": "Safe Browse",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "platform": "win-x64",
-  "publishedAt": "2026-08-09T06:45:01Z",
+  "publishedAt": "2026-08-11T05:46:11Z",
   "msi": {
     "file": "SafeBrowseSetup.msi",
-    "sizeBytes": 150171648,
-    "sha256": "93fb439ea9daa620637bdfea643f143ad7c0708bd70c02afaebd518638388abb",
-    "url": "https://pub-2c62cb4c92de4a818a9abc3ff05b4526.r2.dev/releases/0.1.0/SafeBrowseSetup.msi",
+    "sizeBytes": 178417664,
+    "sha256": "2255cd01ef445ea929820e5bc2943a1facefec5a8870b43c0d1ec6b8488f495f",
+    "url": "https://pub-2c62cb4c92de4a818a9abc3ff05b4526.r2.dev/releases/0.1.1/SafeBrowseSetup.msi",
     "latestUrl": "https://pub-2c62cb4c92de4a818a9abc3ff05b4526.r2.dev/releases/latest/SafeBrowseSetup.msi"
   },
   "scripts": {
-    "install": "https://pub-2c62cb4c92de4a818a9abc3ff05b4526.r2.dev/releases/0.1.0/Install-SafeBrowse.ps1",
-    "uninstall": "https://pub-2c62cb4c92de4a818a9abc3ff05b4526.r2.dev/releases/0.1.0/Uninstall-SafeBrowse.ps1",
-    "configureProtection": "https://pub-2c62cb4c92de4a818a9abc3ff05b4526.r2.dev/releases/0.1.0/configure-protection.ps1"
+    "install": "https://pub-2c62cb4c92de4a818a9abc3ff05b4526.r2.dev/releases/0.1.1/Install-SafeBrowse.ps1",
+    "uninstall": "https://pub-2c62cb4c92de4a818a9abc3ff05b4526.r2.dev/releases/0.1.1/Uninstall-SafeBrowse.ps1",
+    "configureProtection": "https://pub-2c62cb4c92de4a818a9abc3ff05b4526.r2.dev/releases/0.1.1/configure-protection.ps1"
   },
-  "readme": "https://pub-2c62cb4c92de4a818a9abc3ff05b4526.r2.dev/releases/0.1.0/README.md",
+  "readme": "https://pub-2c62cb4c92de4a818a9abc3ff05b4526.r2.dev/releases/0.1.1/README.md",
   "docs": {
     "windowsSetup": "https://github.com/Incorpify-LLC/safe_browse/blob/main/docs/windows_remote_access_setup.md",
     "deployment": "https://github.com/Incorpify-LLC/safe_browse/blob/main/docs/deployment.md"

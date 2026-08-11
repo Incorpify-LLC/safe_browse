@@ -117,7 +117,7 @@ internal static class Enroller
         using var client = new HttpClient { Timeout = TimeSpan.FromSeconds(30) };
         using var response = await client.PostAsJsonAsync(
             endpoint,
-            new { code = code.Trim(), deviceName = name, platform = "windows", agentVersion = "0.1.0" });
+            new { code = code.Trim(), deviceName = name, platform = "windows", agentVersion = "0.1.1" });
 
         var body = await response.Content.ReadAsStringAsync();
         if (!response.IsSuccessStatusCode)

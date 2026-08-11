@@ -1,6 +1,6 @@
 <Wix xmlns="http://wixtoolset.org/schemas/v4/wxs"
      xmlns:ui="http://wixtoolset.org/schemas/v4/wxs/ui">
-  <Package Name="Safe Browse" Manufacturer="Incorpify LLC" Version="0.1.0" UpgradeCode="C75EDBF5-E5BB-445D-A40D-E64310E9E76D" Scope="perMachine">
+  <Package Name="Safe Browse" Manufacturer="Incorpify LLC" Version="0.1.1" UpgradeCode="C75EDBF5-E5BB-445D-A40D-E64310E9E76D" Scope="perMachine">
     <MajorUpgrade DowngradeErrorMessage="A newer Safe Browse version is already installed." />
     <MediaTemplate EmbedCab="yes" />
     <StandardDirectory Id="ProgramFiles64Folder">
